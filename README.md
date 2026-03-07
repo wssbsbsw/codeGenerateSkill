@@ -1,0 +1,83 @@
+# springboot2-crud-codegen
+
+Python CLI tool for generating Spring Boot 2 + MyBatis-Plus CRUD projects from JSON.
+
+## Features
+
+- Generate full Maven project (`pom.xml`, `application.yml`, Java source)
+- Generate single-table CRUD:
+  - `entity`, `mapper`, `service`, `controller`, request DTOs
+- Generate pagination and basic query conditions (`EQ`, `LIKE`)
+- Generate multi-table relation query with auto join SQL (LEFT/INNER)
+- Unified API response model (`Result<T>`, `PageResult<T>`)
+- Fixed `schema v1` validation with detailed error paths
+
+## Install
+
+```bash
+pip install -e .
+```
+
+## Usage
+
+```bash
+codegen -c examples/sample.json -o ./output
+```
+
+Default behavior overwrites existing files.
+
+## JSON schema v1 overview
+
+Top-level required keys:
+
+- `project`
+- `datasource`
+- `tables`
+- `relations`
+- `global`
+
+### `project`
+
+- `groupId` (string)
+- `artifactId` (string)
+- `name` (string)
+- `basePackage` (string)
+- `bootVersion` (must start with `2.`)
+- `javaVersion` (must be `8`)
+
+### `tables[]`
+
+- `name`: db table name
+- `entityName`: Java entity class name
+- `primaryKey`: primary key column name
+- `fields[]`:
+  - `name`, `type`, `nullable`, `comment`
+  - optional: `unique`, `logicDelete`, `autoFill`, `idType`
+- `queryableFields[]`:
+  - either string field name (defaults to `EQ`)
+  - or object: `{ "name": "xxx", "operator": "EQ|LIKE" }`
+
+### `relations[]`
+
+- `leftTable`, `rightTable`
+- `joinType`: `INNER` or `LEFT`
+- `on[]`: `{ "leftField": "...", "rightField": "..." }`
+- `select[]`: `{ "table": "left/right/tableName", "field": "...", "alias": "..." }`
+- `filters[]`: `{ "table": "...", "field": "...", "operator": "EQ|LIKE", "param": "..." }`
+- `dtoName`, `methodName`
+
+## Output structure
+
+Generated root: `<output>/<artifactId>/`
+
+- `pom.xml`
+- `src/main/resources/application.yml`
+- `src/main/resources/mapper/*.xml`
+- `src/main/java/<basePackage>/...`
+
+## Notes
+
+- Java 8 only (v1)
+- Spring Boot 2.x only (v1)
+- MySQL datasource template by default
+- Generated project does not include test classes

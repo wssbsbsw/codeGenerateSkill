@@ -1,0 +1,17 @@
+spring:
+  application:
+    name: {{ project.artifact_id }}
+  datasource:
+    url: "{{ datasource_placeholders.url }}"
+    username: "{{ datasource_placeholders.username }}"
+    password: "{{ datasource_placeholders.password }}"
+    driver-class-name: "{{ datasource_placeholders.driver_class_name }}"
+
+mybatis-plus:
+  mapper-locations: classpath*:mapper/*.xml
+  configuration:
+    map-underscore-to-camel-case: true
+    cache-enabled: false
+
+server:
+  port: 8080

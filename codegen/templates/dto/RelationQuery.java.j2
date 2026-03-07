@@ -1,0 +1,11 @@
+package {{ package }}.dto;
+
+{% for item in query_imports %}import {{ item }};
+{% endfor %}import lombok.Data;
+
+@Data
+public class {{ relation.query_name }} {
+{% for field in query_fields %}{% for annotation in field.annotations %}    {{ annotation }}
+{% endfor %}    private {{ field.java_type }} {{ field.property_name }}{% if field.default_value %} = {{ field.default_value }}{% endif %};
+{% endfor %}
+}

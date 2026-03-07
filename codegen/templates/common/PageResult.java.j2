@@ -1,0 +1,33 @@
+package {{ package }}.common;
+
+import com.baomidou.mybatisplus.core.metadata.IPage;
+import lombok.Data;
+
+import java.util.Collections;
+import java.util.List;
+
+@Data
+public class PageResult<T> {
+    private long page;
+    private long size;
+    private long total;
+    private List<T> records;
+
+    public static <T> PageResult<T> of(IPage<T> pageData) {
+        PageResult<T> pageResult = new PageResult<>();
+        pageResult.setPage(pageData.getCurrent());
+        pageResult.setSize(pageData.getSize());
+        pageResult.setTotal(pageData.getTotal());
+        pageResult.setRecords(pageData.getRecords());
+        return pageResult;
+    }
+
+    public static <T> PageResult<T> empty(long page, long size) {
+        PageResult<T> pageResult = new PageResult<>();
+        pageResult.setPage(page);
+        pageResult.setSize(size);
+        pageResult.setTotal(0);
+        pageResult.setRecords(Collections.emptyList());
+        return pageResult;
+    }
+}

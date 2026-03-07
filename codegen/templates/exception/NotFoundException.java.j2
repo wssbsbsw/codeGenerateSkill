@@ -1,0 +1,9 @@
+package {{ package }}.exception;
+
+import {{ package }}.common.ErrorCode;
+
+public class NotFoundException extends BizException {
+    public NotFoundException(String message) {
+        super(ErrorCode.NOT_FOUND, message);
+    }
+}

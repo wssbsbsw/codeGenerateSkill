@@ -1,0 +1,66 @@
+package {{ package }}.controller;
+
+import {{ package }}.common.PageResult;
+import {{ package }}.common.Result;
+import {{ package }}.dto.{{ table.create_dto_name }};
+import {{ package }}.dto.{{ table.query_dto_name }};
+import {{ package }}.dto.{{ table.update_dto_name }};
+import {{ package }}.entity.{{ table.entity_name }};
+{% for relation in relation_methods %}import {{ package }}.dto.{{ relation.dto_name }};
+import {{ package }}.dto.{{ relation.query_name }};
+{% endfor %}import {{ package }}.service.{{ table.service_name }};
+import org.springframework.validation.annotation.Validated;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.ModelAttribute;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
+
+@RestController
+@RequestMapping("{{ project.api_prefix }}/{{ table.resource_name }}")
+public class {{ table.controller_name }} {
+
+    private final {{ table.service_name }} {{ table.object_name }}Service;
+
+    public {{ table.controller_name }}({{ table.service_name }} {{ table.object_name }}Service) {
+        this.{{ table.object_name }}Service = {{ table.object_name }}Service;
+    }
+
+    @PostMapping
+    public Result<{{ table.primary_key_java_type }}> create(@Validated @RequestBody {{ table.create_dto_name }} request) {
+        return Result.success({{ table.object_name }}Service.create(request));
+    }
+
+    @GetMapping("/{id}")
+    public Result<{{ table.entity_name }}> getById(@PathVariable("id") {{ table.primary_key_java_type }} id) {
+        return Result.success({{ table.object_name }}Service.getById(id));
+    }
+
+    @PutMapping("/{id}")
+    public Result<Boolean> update(
+            @PathVariable("id") {{ table.primary_key_java_type }} id,
+            @Validated @RequestBody {{ table.update_dto_name }} request
+    ) {
+        return Result.success({{ table.object_name }}Service.update(id, request));
+    }
+
+    @DeleteMapping("/{id}")
+    public Result<Boolean> delete(@PathVariable("id") {{ table.primary_key_java_type }} id) {
+        return Result.success({{ table.object_name }}Service.deleteById(id));
+    }
+
+    @GetMapping
+    public Result<PageResult<{{ table.entity_name }}>> page(@Validated @ModelAttribute {{ table.query_dto_name }} query) {
+        return Result.success({{ table.object_name }}Service.page(query));
+    }
+{% for relation in relation_methods %}
+    @GetMapping("/relations/{{ relation.endpoint_name }}")
+    public Result<PageResult<{{ relation.dto_name }}>> {{ relation.method_name }}(@Validated @ModelAttribute {{ relation.query_name }} query) {
+        return Result.success({{ table.object_name }}Service.{{ relation.method_name }}(query));
+    }
+{% endfor %}
+}
