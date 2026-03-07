@@ -5,6 +5,39 @@ from typing import Any, Dict, List, Optional
 
 
 @dataclass(slots=True)
+class FrontendOptionIR:
+    label: str
+    value: Any
+
+
+@dataclass(slots=True)
+class FieldFrontendIR:
+    label: str = ""
+    component: str = ""
+    query_component: str = ""
+    table_visible: bool = True
+    form_visible: bool = True
+    detail_visible: bool = True
+    query_visible: bool = True
+    placeholder: str = ""
+    options: List[FrontendOptionIR] = field(default_factory=list)
+
+
+@dataclass(slots=True)
+class TableFrontendIR:
+    menu_title: str = ""
+    menu_icon: str = "el-icon-document"
+    menu_visible: bool = True
+
+
+@dataclass(slots=True)
+class RelationFrontendIR:
+    menu_title: str = ""
+    menu_icon: str = "el-icon-connection"
+    menu_visible: bool = True
+
+
+@dataclass(slots=True)
 class FieldIR:
     column_name: str
     property_name: str
@@ -17,6 +50,7 @@ class FieldIR:
     auto_fill: Optional[str] = None
     id_type: Optional[str] = None
     is_primary: bool = False
+    frontend: FieldFrontendIR = field(default_factory=FieldFrontendIR)
 
 
 @dataclass(slots=True)
@@ -73,6 +107,7 @@ class TableIR:
     seed_data: List[Dict[str, Any]] = field(default_factory=list)
     infer_indexes: bool = True
     infer_foreign_keys: bool = True
+    frontend: TableFrontendIR = field(default_factory=TableFrontendIR)
 
     @property
     def mapper_name(self) -> str:
@@ -143,6 +178,17 @@ class RelationIR:
     filters: List[RelationFilterIR] = field(default_factory=list)
     sortable_fields: List[SortableFieldIR] = field(default_factory=list)
     on_clauses: List[RelationOnIR] = field(default_factory=list)
+    frontend: RelationFrontendIR = field(default_factory=RelationFrontendIR)
+
+
+@dataclass(slots=True)
+class FrontendIR:
+    enabled: bool = False
+    framework: str = "vue2"
+    output_dir: str = "frontend"
+    app_title: str = ""
+    backend_url: str = "http://127.0.0.1:8080"
+    dev_port: int = 8081
 
 
 @dataclass(slots=True)
@@ -159,6 +205,7 @@ class ProjectIR:
     date_time_format: str
     enable_swagger: bool
     application_name: str
+    frontend: FrontendIR = field(default_factory=FrontendIR)
     tables: List[TableIR] = field(default_factory=list)
     relations: List[RelationIR] = field(default_factory=list)
 

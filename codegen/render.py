@@ -8,6 +8,7 @@ from typing import Dict, Iterable, List, cast
 from jinja2 import Environment, FileSystemLoader
 
 from .ir import (
+    FieldIR,
     ForeignKeyIR,
     IndexIR,
     ProjectIR,
@@ -17,7 +18,7 @@ from .ir import (
     SortableFieldIR,
     TableIR,
 )
-from .type_mapping import db_type_length, java_import, snake_to_camel
+from .type_mapping import db_type_length, java_import, snake_to_camel, snake_to_pascal
 
 TEMPLATE_ROOT = Path(__file__).resolve().parent / "templates"
 
@@ -182,6 +183,9 @@ class CodeRenderer:
             files[f"{java_root}/dto/{relation.query_name}.java"] = self._render(
                 "dto/RelationQuery.java.j2", **relation_context
             )
+
+        if project.frontend.enabled and project.frontend.framework == "vue2":
+            files.update(self._render_vue2_frontend(project))
 
         return files
 
@@ -370,6 +374,572 @@ class CodeRenderer:
             + sortable_field.property_name[1:],
             "side": sortable_field.side,
         }
+
+    def _render_vue2_frontend(self, project: ProjectIR) -> Dict[str, str]:
+        files: Dict[str, str] = {}
+        frontend_root = project.frontend.output_dir.strip("/") or "frontend"
+        relation_groups = self._group_relations(project.relations)
+        table_map = {table.name: table for table in project.tables}
+
+        table_pages = [
+            self._frontend_table_page_context(
+                project,
+                table,
+                relation_groups.get(table.name, []),
+            )
+            for table in project.tables
+        ]
+        relation_pages = [
+            self._frontend_relation_page_context(project, relation, table_map)
+            for relation in project.relations
+        ]
+
+        frontend_context = {
+            "project": project,
+            "frontend": project.frontend,
+            "table_pages": table_pages,
+            "relation_pages": relation_pages,
+            "menu_groups": self._frontend_menu_groups(table_pages, relation_pages),
+            "dashboard_cards": [
+                {
+                    "title": "Data Modules",
+                    "value": len(table_pages),
+                    "description": "Generated CRUD pages",
+                    "icon": "el-icon-s-grid",
+                },
+                {
+                    "title": "Relation Views",
+                    "value": len(relation_pages),
+                    "description": "Generated join query pages",
+                    "icon": "el-icon-connection",
+                },
+            ],
+        }
+
+        shared_files = {
+            f"{frontend_root}/package.json": "frontend/package.json.j2",
+            f"{frontend_root}/babel.config.js": "frontend/babel.config.js.j2",
+            f"{frontend_root}/vue.config.js": "frontend/vue.config.js.j2",
+            f"{frontend_root}/public/index.html": "frontend/public/index.html.j2",
+            f"{frontend_root}/src/main.js": "frontend/src/main.js.j2",
+            f"{frontend_root}/src/App.vue": "frontend/src/App.vue.j2",
+            f"{frontend_root}/src/router/index.js": "frontend/src/router/index.js.j2",
+            f"{frontend_root}/src/layout/Layout.vue": "frontend/src/layout/Layout.vue.j2",
+            f"{frontend_root}/src/styles/index.scss": "frontend/src/styles/index.scss.j2",
+            f"{frontend_root}/src/utils/request.js": "frontend/src/utils/request.js.j2",
+            f"{frontend_root}/src/utils/format.js": "frontend/src/utils/format.js.j2",
+            f"{frontend_root}/src/views/dashboard/index.vue": "frontend/src/views/dashboard/index.vue.j2",
+        }
+        for file_path, template_name in shared_files.items():
+            files[file_path] = self._render(template_name, **frontend_context)
+
+        for page in table_pages:
+            files[f"{frontend_root}/src/api/{page['resource_name']}.js"] = self._render(
+                "frontend/src/api/table.js.j2",
+                **frontend_context,
+                page=page,
+            )
+            files[f"{frontend_root}/src/views/{page['resource_name']}/index.vue"] = (
+                self._render(
+                    "frontend/src/views/table/index.vue.j2",
+                    **frontend_context,
+                    page=page,
+                )
+            )
+
+        for page in relation_pages:
+            files[
+                f"{frontend_root}/src/views/relations/{page['endpoint_name']}/index.vue"
+            ] = self._render(
+                "frontend/src/views/relation/index.vue.j2",
+                **frontend_context,
+                page=page,
+            )
+
+        return files
+
+    def _frontend_menu_groups(
+        self,
+        table_pages: List[Dict[str, object]],
+        relation_pages: List[Dict[str, object]],
+    ) -> List[Dict[str, object]]:
+        groups = [
+            {
+                "title": "Data Management",
+                "icon": "el-icon-s-grid",
+                "items": [
+                    {
+                        "path": str(page["route_path"]),
+                        "title": str(page["title"]),
+                        "icon": str(page["menu_icon"]),
+                    }
+                    for page in table_pages
+                    if bool(page["menu_visible"])
+                ],
+            }
+        ]
+        if relation_pages:
+            groups.append(
+                {
+                    "title": "Relation Views",
+                    "icon": "el-icon-connection",
+                    "items": [
+                        {
+                            "path": str(page["route_path"]),
+                            "title": str(page["title"]),
+                            "icon": str(page["menu_icon"]),
+                        }
+                        for page in relation_pages
+                        if bool(page["menu_visible"])
+                    ],
+                }
+            )
+        return [group for group in groups if group["items"]]
+
+    def _frontend_table_page_context(
+        self,
+        project: ProjectIR,
+        table: TableIR,
+        table_relations: List[RelationIR],
+    ) -> Dict[str, object]:
+        field_by_property = {field.property_name: field for field in table.fields}
+        title = table.frontend.menu_title or table.comment or table.entity_name
+        query_fields = [
+            self._frontend_query_field(
+                field_by_property[item.property_name], item.property_name
+            )
+            for item in table.queryable_fields
+            if item.property_name in field_by_property
+            and field_by_property[item.property_name].frontend.query_visible
+        ]
+        form_fields = [
+            self._frontend_form_field(field)
+            for field in table.fields
+            if not field.is_primary
+            and not field.logic_delete
+            and not field.auto_fill
+            and field.frontend.form_visible
+        ]
+        table_columns = [
+            self._frontend_table_column(field, table.sortable_fields)
+            for field in table.fields
+            if not field.logic_delete and field.frontend.table_visible
+        ]
+        detail_fields = [
+            self._frontend_detail_field(field)
+            for field in table.fields
+            if not field.logic_delete and field.frontend.detail_visible
+        ]
+        sort_options = [
+            self._frontend_sort_option(
+                sort_item, field_by_property[sort_item.property_name].comment
+            )
+            for sort_item in table.sortable_fields
+            if sort_item.property_name in field_by_property
+        ]
+        resource_pascal = snake_to_pascal(table.resource_name)
+        relation_methods = [
+            {
+                "method_name": relation.method_name,
+                "api_function_name": f"fetch{relation.method_name[:1].upper()}{relation.method_name[1:]}",
+                "endpoint_name": relation.name,
+                "title": relation.frontend.menu_title
+                or self._frontend_title(relation.name, relation.dto_name),
+                "route_path": f"/relations/{relation.name}",
+                "menu_icon": relation.frontend.menu_icon,
+                "menu_visible": relation.frontend.menu_visible,
+            }
+            for relation in table_relations
+        ]
+
+        return {
+            "title": title,
+            "subtitle": f"Manage {table.name} records with generated CRUD views.",
+            "resource_name": table.resource_name,
+            "entity_name": table.entity_name,
+            "route_path": f"/{table.resource_name}",
+            "route_name": f"{table.entity_name}Index",
+            "menu_icon": table.frontend.menu_icon,
+            "menu_visible": table.frontend.menu_visible,
+            "api_base": f"{project.api_prefix}/{table.resource_name}",
+            "api_function_names": {
+                "fetch_page": f"fetch{resource_pascal}Page",
+                "fetch_one": f"fetch{table.entity_name}",
+                "create": f"create{table.entity_name}",
+                "update": f"update{table.entity_name}",
+                "delete": f"delete{table.entity_name}",
+            },
+            "query_fields": query_fields,
+            "form_fields": form_fields,
+            "table_columns": table_columns,
+            "detail_fields": detail_fields,
+            "sort_options": sort_options,
+            "has_sorting": bool(sort_options),
+            "sort_map": [
+                {
+                    "prop": item["property_name"],
+                    "request_name": item["request_name"],
+                }
+                for item in sort_options
+            ],
+            "primary_key_property": table.primary_key_property,
+            "primary_key_method_suffix": table.primary_key_property[:1].upper()
+            + table.primary_key_property[1:],
+            "relation_methods": relation_methods,
+        }
+
+    def _frontend_relation_page_context(
+        self,
+        project: ProjectIR,
+        relation: RelationIR,
+        table_map: Dict[str, TableIR],
+    ) -> Dict[str, object]:
+        left_table = table_map[relation.left_table]
+        right_table = table_map[relation.right_table]
+        left_fields = {field.column_name: field for field in left_table.fields}
+        right_fields = {field.column_name: field for field in right_table.fields}
+
+        query_fields = []
+        for item in relation.filters:
+            source_fields = left_fields if item.side == "left" else right_fields
+            source_field = source_fields[item.column_name]
+            if not source_field.frontend.query_visible:
+                continue
+            query_fields.append(
+                self._frontend_query_field(source_field, item.param_name)
+            )
+
+        columns = []
+        for item in relation.select_items:
+            source_fields = left_fields if item.side == "left" else right_fields
+            source_field = source_fields[item.column_name]
+            columns.append(
+                {
+                    "property_name": item.alias,
+                    "label": source_field.comment
+                    or self._frontend_title(item.alias, item.alias),
+                    "formatter": self._frontend_formatter(item.java_type),
+                }
+            )
+
+        sort_options = []
+        for sort_item in relation.sortable_fields:
+            source_fields = left_fields if sort_item.side == "left" else right_fields
+            source_field = source_fields[sort_item.column_name]
+            sort_options.append(
+                self._frontend_sort_option(sort_item, source_field.comment)
+            )
+
+        return {
+            "title": relation.frontend.menu_title
+            or self._frontend_title(relation.name, relation.dto_name),
+            "subtitle": f"Browse generated join results for {relation.left_table} and {relation.right_table}.",
+            "endpoint_name": relation.name,
+            "route_path": f"/relations/{relation.name}",
+            "route_name": f"{snake_to_pascal(relation.name)}RelationIndex",
+            "menu_icon": relation.frontend.menu_icon,
+            "menu_visible": relation.frontend.menu_visible,
+            "api_import_file": left_table.resource_name,
+            "api_function_name": f"fetch{relation.method_name[:1].upper()}{relation.method_name[1:]}",
+            "query_fields": query_fields,
+            "columns": columns,
+            "sort_options": sort_options,
+            "has_sorting": bool(sort_options),
+        }
+
+    def _frontend_form_field(self, field: FieldIR) -> Dict[str, object]:
+        widget = self._frontend_widget(
+            str(field.java_type),
+            str(field.db_type),
+            mode="form",
+            component_override=str(field.frontend.component),
+            has_options=bool(field.frontend.options),
+        )
+        label = (
+            str(field.frontend.label)
+            or str(field.comment)
+            or self._frontend_title(str(field.property_name), str(field.property_name))
+        )
+        return {
+            "property_name": str(field.property_name),
+            "label": label,
+            "kind": widget["kind"],
+            "default_js": widget["default_js"],
+            "step": widget["step"],
+            "picker_type": widget["picker_type"],
+            "value_format": widget["value_format"],
+            "max_length": widget["max_length"],
+            "required": not bool(field.nullable),
+            "options": [
+                {"label": item.label, "value": item.value}
+                for item in field.frontend.options
+            ],
+            "placeholder": self._frontend_placeholder(
+                widget["kind"],
+                str(field.frontend.placeholder) or label,
+            ),
+        }
+
+    def _frontend_query_field(
+        self, field: FieldIR, prop_name: str
+    ) -> Dict[str, object]:
+        widget = self._frontend_widget(
+            str(field.java_type),
+            str(field.db_type),
+            mode="query",
+            component_override=str(field.frontend.query_component)
+            or str(field.frontend.component),
+            has_options=bool(field.frontend.options),
+        )
+        label = (
+            str(field.frontend.label)
+            or str(field.comment)
+            or self._frontend_title(prop_name, prop_name)
+        )
+        return {
+            "property_name": prop_name,
+            "label": label,
+            "kind": widget["kind"],
+            "default_js": widget["default_js"],
+            "step": widget["step"],
+            "picker_type": widget["picker_type"],
+            "value_format": widget["value_format"],
+            "options": [
+                {"label": item.label, "value": item.value}
+                for item in field.frontend.options
+            ],
+            "placeholder": self._frontend_placeholder(
+                widget["kind"],
+                str(field.frontend.placeholder) or label,
+            ),
+        }
+
+    def _frontend_table_column(
+        self,
+        field: FieldIR,
+        sortable_fields: Iterable[SortableFieldIR],
+    ) -> Dict[str, object]:
+        sortable_props = {item.property_name for item in sortable_fields}
+        property_name = str(field.property_name)
+        return {
+            "property_name": property_name,
+            "label": str(field.frontend.label)
+            or str(field.comment)
+            or self._frontend_title(property_name, property_name),
+            "formatter": self._frontend_formatter(str(field.java_type)),
+            "sortable": property_name in sortable_props,
+        }
+
+    def _frontend_detail_field(self, field: FieldIR) -> Dict[str, object]:
+        property_name = str(field.property_name)
+        return {
+            "property_name": property_name,
+            "label": str(field.frontend.label)
+            or str(field.comment)
+            or self._frontend_title(property_name, property_name),
+            "formatter": self._frontend_formatter(str(field.java_type)),
+        }
+
+    def _frontend_sort_option(
+        self,
+        sort_item: SortableFieldIR,
+        comment: str,
+    ) -> Dict[str, object]:
+        return {
+            "request_name": sort_item.request_name,
+            "property_name": sort_item.property_name,
+            "label": comment
+            or self._frontend_title(sort_item.request_name, sort_item.request_name),
+        }
+
+    def _frontend_widget(
+        self,
+        java_type: str,
+        db_type: str,
+        mode: str,
+        component_override: str = "",
+        has_options: bool = False,
+    ) -> Dict[str, object]:
+        if component_override:
+            return self._frontend_widget_from_component(
+                component_override,
+                java_type,
+                db_type,
+                mode,
+                has_options,
+            )
+        max_length = db_type_length(db_type)
+        if has_options:
+            return self._frontend_widget_from_component(
+                "select",
+                java_type,
+                db_type,
+                mode,
+                has_options,
+            )
+        if java_type == "String":
+            kind = (
+                "textarea"
+                if "text" in db_type.lower() or (max_length or 0) > 120
+                else "text"
+            )
+            return {
+                "kind": kind,
+                "default_js": "''",
+                "step": "1",
+                "picker_type": "",
+                "value_format": "",
+                "max_length": max_length or 255,
+            }
+        if java_type in {"Long", "Integer"}:
+            return {
+                "kind": "number",
+                "default_js": "null",
+                "step": "1",
+                "picker_type": "",
+                "value_format": "",
+                "max_length": 0,
+            }
+        if java_type in {"Double", "BigDecimal"}:
+            return {
+                "kind": "number",
+                "default_js": "null",
+                "step": "0.01",
+                "picker_type": "",
+                "value_format": "",
+                "max_length": 0,
+            }
+        if java_type == "LocalDateTime":
+            return {
+                "kind": "datetime",
+                "default_js": "''",
+                "step": "1",
+                "picker_type": "datetime",
+                "value_format": "yyyy-MM-ddTHH:mm:ss",
+                "max_length": 0,
+            }
+        if java_type == "LocalDate":
+            return {
+                "kind": "date",
+                "default_js": "''",
+                "step": "1",
+                "picker_type": "date",
+                "value_format": "yyyy-MM-dd",
+                "max_length": 0,
+            }
+        if java_type == "Boolean":
+            return {
+                "kind": "boolean" if mode == "query" else "switch",
+                "default_js": "null" if mode == "query" else "false",
+                "step": "1",
+                "picker_type": "",
+                "value_format": "",
+                "max_length": 0,
+            }
+        return {
+            "kind": "text",
+            "default_js": "''",
+            "step": "1",
+            "picker_type": "",
+            "value_format": "",
+            "max_length": max_length or 255,
+        }
+
+    def _frontend_widget_from_component(
+        self,
+        component: str,
+        java_type: str,
+        db_type: str,
+        mode: str,
+        has_options: bool,
+    ) -> Dict[str, object]:
+        max_length = db_type_length(db_type)
+        if component in {"text", "textarea"}:
+            return {
+                "kind": component,
+                "default_js": "''",
+                "step": "1",
+                "picker_type": "",
+                "value_format": "",
+                "max_length": max_length or 255,
+            }
+        if component == "number":
+            return {
+                "kind": "number",
+                "default_js": "null",
+                "step": "0.01" if java_type in {"Double", "BigDecimal"} else "1",
+                "picker_type": "",
+                "value_format": "",
+                "max_length": 0,
+            }
+        if component == "switch":
+            return {
+                "kind": "boolean" if mode == "query" else "switch",
+                "default_js": "null" if mode == "query" else "false",
+                "step": "1",
+                "picker_type": "",
+                "value_format": "",
+                "max_length": 0,
+            }
+        if component == "date":
+            return {
+                "kind": "date",
+                "default_js": "''",
+                "step": "1",
+                "picker_type": "date",
+                "value_format": "yyyy-MM-dd",
+                "max_length": 0,
+            }
+        if component == "datetime":
+            return {
+                "kind": "datetime",
+                "default_js": "''",
+                "step": "1",
+                "picker_type": "datetime",
+                "value_format": "yyyy-MM-ddTHH:mm:ss",
+                "max_length": 0,
+            }
+        if component == "select":
+            default_js = "''" if java_type == "String" else "null"
+            if has_options and any(
+                item in {"Boolean", "boolean"}
+                for item in {java_type, str(java_type).lower()}
+            ):
+                default_js = "null" if mode == "query" else "false"
+            return {
+                "kind": "select",
+                "default_js": default_js,
+                "step": "1",
+                "picker_type": "",
+                "value_format": "",
+                "max_length": 0,
+            }
+        return self._frontend_widget(java_type, db_type, mode)
+
+    def _frontend_formatter(self, java_type: str) -> str:
+        if java_type == "LocalDateTime":
+            return "datetime"
+        if java_type == "LocalDate":
+            return "date"
+        if java_type == "Boolean":
+            return "boolean"
+        return "plain"
+
+    def _frontend_placeholder(self, kind: object, label: str) -> str:
+        kind_name = str(kind)
+        if kind_name in {"date", "datetime", "boolean"}:
+            return f"Select {label}"
+        return f"Enter {label}"
+
+    def _frontend_title(self, name: str, fallback: str) -> str:
+        text = name or fallback
+        if not text:
+            return "Untitled"
+        normalized = re.sub(r"([a-z0-9])([A-Z])", r"\1 \2", text)
+        normalized = normalized.replace("_", " ").replace("-", " ").strip()
+        if not normalized:
+            normalized = fallback
+        return " ".join(part.capitalize() for part in normalized.split())
 
     def _auto_fill_imports(self, project: ProjectIR) -> List[str]:
         imports = set()

@@ -86,6 +86,53 @@ class ParserTest(unittest.TestCase):
         self.assertEqual(students_table.sortable_fields[0].request_name, "studentName")
         self.assertEqual(relation.sortable_fields[0].request_name, "studentName")
 
+    def test_parse_frontend_config(self) -> None:
+        payload = json.loads(json.dumps(self.sample_payload))
+        payload["frontend"] = {
+            "enabled": True,
+            "framework": "vue2",
+            "outputDir": "frontend",
+            "appTitle": "Demo Admin",
+            "backendUrl": "http://127.0.0.1:8080",
+            "devPort": 8081,
+        }
+        payload["tables"][0]["frontend"] = {
+            "menuTitle": "User Center",
+            "menuIcon": "el-icon-user",
+            "menuVisible": True,
+        }
+        payload["tables"][0]["fields"][1]["frontend"] = {
+            "label": "Login Name",
+            "component": "textarea",
+            "queryComponent": "text",
+            "tableVisible": False,
+            "formVisible": True,
+            "detailVisible": True,
+            "queryVisible": True,
+            "placeholder": "Enter username",
+            "options": [],
+        }
+        payload["relations"][0]["frontend"] = {
+            "menuTitle": "Order User Report",
+            "menuIcon": "el-icon-data-analysis",
+            "menuVisible": True,
+        }
+
+        project = parse_config(payload)
+
+        self.assertTrue(project.frontend.enabled)
+        self.assertEqual(project.frontend.framework, "vue2")
+        self.assertEqual(project.frontend.output_dir, "frontend")
+        self.assertEqual(project.frontend.app_title, "Demo Admin")
+        self.assertEqual(project.frontend.backend_url, "http://127.0.0.1:8080")
+        self.assertEqual(project.frontend.dev_port, 8081)
+        self.assertEqual(project.tables[0].frontend.menu_title, "User Center")
+        self.assertEqual(project.tables[0].frontend.menu_icon, "el-icon-user")
+        self.assertFalse(project.tables[0].fields[1].frontend.table_visible)
+        self.assertEqual(project.tables[0].fields[1].frontend.label, "Login Name")
+        self.assertEqual(project.tables[0].fields[1].frontend.component, "textarea")
+        self.assertEqual(project.relations[0].frontend.menu_title, "Order User Report")
+
 
 if __name__ == "__main__":
     unittest.main()

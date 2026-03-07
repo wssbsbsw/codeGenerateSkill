@@ -49,6 +49,22 @@ SCHEMA_V1: Dict[str, Any] = {
                 "driverClassName": {"type": "string", "minLength": 1},
             },
         },
+        "frontend": {
+            "type": "object",
+            "additionalProperties": False,
+            "properties": {
+                "enabled": {"type": "boolean", "default": False},
+                "framework": {"type": "string", "enum": ["vue2"]},
+                "outputDir": {"type": "string", "minLength": 1},
+                "appTitle": {"type": "string"},
+                "backendUrl": {"type": "string", "minLength": 1},
+                "devPort": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 65535,
+                },
+            },
+        },
         "tables": {
             "type": "array",
             "minItems": 1,
@@ -66,6 +82,15 @@ SCHEMA_V1: Dict[str, Any] = {
                 "properties": {
                     "name": {"type": "string", "minLength": 1},
                     "comment": {"type": "string"},
+                    "frontend": {
+                        "type": "object",
+                        "additionalProperties": False,
+                        "properties": {
+                            "menuTitle": {"type": "string"},
+                            "menuIcon": {"type": "string", "minLength": 1},
+                            "menuVisible": {"type": "boolean", "default": True},
+                        },
+                    },
                     "entityName": {"type": "string", "minLength": 1},
                     "primaryKey": {"type": "string", "minLength": 1},
                     "queryableFields": {
@@ -194,6 +219,77 @@ SCHEMA_V1: Dict[str, Any] = {
                                 "comment": {"type": "string"},
                                 "unique": {"type": "boolean", "default": False},
                                 "logicDelete": {"type": "boolean", "default": False},
+                                "frontend": {
+                                    "type": "object",
+                                    "additionalProperties": False,
+                                    "properties": {
+                                        "label": {"type": "string"},
+                                        "component": {
+                                            "type": "string",
+                                            "enum": [
+                                                "text",
+                                                "textarea",
+                                                "number",
+                                                "switch",
+                                                "date",
+                                                "datetime",
+                                                "select",
+                                            ],
+                                        },
+                                        "queryComponent": {
+                                            "type": "string",
+                                            "enum": [
+                                                "text",
+                                                "textarea",
+                                                "number",
+                                                "switch",
+                                                "date",
+                                                "datetime",
+                                                "select",
+                                            ],
+                                        },
+                                        "tableVisible": {
+                                            "type": "boolean",
+                                            "default": True,
+                                        },
+                                        "formVisible": {
+                                            "type": "boolean",
+                                            "default": True,
+                                        },
+                                        "detailVisible": {
+                                            "type": "boolean",
+                                            "default": True,
+                                        },
+                                        "queryVisible": {
+                                            "type": "boolean",
+                                            "default": True,
+                                        },
+                                        "placeholder": {"type": "string"},
+                                        "options": {
+                                            "type": "array",
+                                            "items": {
+                                                "type": "object",
+                                                "required": ["label", "value"],
+                                                "additionalProperties": False,
+                                                "properties": {
+                                                    "label": {
+                                                        "type": "string",
+                                                        "minLength": 1,
+                                                    },
+                                                    "value": {
+                                                        "type": [
+                                                            "string",
+                                                            "number",
+                                                            "integer",
+                                                            "boolean",
+                                                            "null",
+                                                        ]
+                                                    },
+                                                },
+                                            },
+                                        },
+                                    },
+                                },
                                 "autoFill": {
                                     "type": "string",
                                     "enum": ["INSERT", "UPDATE", "INSERT_UPDATE"],
@@ -226,6 +322,15 @@ SCHEMA_V1: Dict[str, Any] = {
                 "additionalProperties": False,
                 "properties": {
                     "name": {"type": "string", "minLength": 1},
+                    "frontend": {
+                        "type": "object",
+                        "additionalProperties": False,
+                        "properties": {
+                            "menuTitle": {"type": "string"},
+                            "menuIcon": {"type": "string", "minLength": 1},
+                            "menuVisible": {"type": "boolean", "default": True},
+                        },
+                    },
                     "leftTable": {"type": "string", "minLength": 1},
                     "rightTable": {"type": "string", "minLength": 1},
                     "joinType": {"type": "string", "enum": ["INNER", "LEFT"]},

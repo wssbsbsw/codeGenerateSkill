@@ -8,16 +8,21 @@ from typing import Any, Dict, List
 
 from .ir import (
     FieldIR,
+    FieldFrontendIR,
+    FrontendIR,
+    FrontendOptionIR,
     ForeignKeyIR,
     IndexIR,
     ProjectIR,
     QueryableFieldIR,
+    RelationFrontendIR,
     RelationFilterIR,
     RelationIR,
     RelationOnIR,
     RelationSelectIR,
     SortableFieldIR,
     TableIR,
+    TableFrontendIR,
 )
 from .schema import validate_schema
 from .type_mapping import db_to_java, snake_to_camel, snake_to_pascal
@@ -55,6 +60,7 @@ def parse_config(payload: Dict[str, Any]) -> ProjectIR:
 
     project_cfg = payload["project"]
     datasource_cfg = payload["datasource"]
+    frontend_cfg = payload.get("frontend", {})
     global_cfg = payload["global"]
 
     if not _is_valid_package(project_cfg["basePackage"]):
@@ -119,6 +125,22 @@ def parse_config(payload: Dict[str, Any]) -> ProjectIR:
             if logic_delete:
                 logic_delete_count += 1
 
+            field_frontend_cfg = field_cfg.get("frontend", {})
+            field_frontend = FieldFrontendIR(
+                label=field_frontend_cfg.get("label", ""),
+                component=field_frontend_cfg.get("component", ""),
+                query_component=field_frontend_cfg.get("queryComponent", ""),
+                table_visible=bool(field_frontend_cfg.get("tableVisible", True)),
+                form_visible=bool(field_frontend_cfg.get("formVisible", True)),
+                detail_visible=bool(field_frontend_cfg.get("detailVisible", True)),
+                query_visible=bool(field_frontend_cfg.get("queryVisible", True)),
+                placeholder=field_frontend_cfg.get("placeholder", ""),
+                options=[
+                    FrontendOptionIR(label=item["label"], value=item["value"])
+                    for item in field_frontend_cfg.get("options", [])
+                ],
+            )
+
             field_ir = FieldIR(
                 column_name=column_name,
                 property_name=property_name,
@@ -131,6 +153,7 @@ def parse_config(payload: Dict[str, Any]) -> ProjectIR:
                 auto_fill=field_cfg.get("autoFill"),
                 id_type=field_cfg.get("idType"),
                 is_primary=False,
+                frontend=field_frontend,
             )
             fields.append(field_ir)
 
@@ -232,6 +255,15 @@ def parse_config(payload: Dict[str, Any]) -> ProjectIR:
             seed_data=seed_data,
             infer_indexes=bool(table_cfg.get("inferIndexes", True)),
             infer_foreign_keys=bool(table_cfg.get("inferForeignKeys", True)),
+            frontend=TableFrontendIR(
+                menu_title=table_cfg.get("frontend", {}).get("menuTitle", ""),
+                menu_icon=table_cfg.get("frontend", {}).get(
+                    "menuIcon", "el-icon-document"
+                ),
+                menu_visible=bool(
+                    table_cfg.get("frontend", {}).get("menuVisible", True)
+                ),
+            ),
         )
 
         table_map[table_name] = table_ir
@@ -716,11 +748,32 @@ def parse_config(payload: Dict[str, Any]) -> ProjectIR:
             filters=relation_filters,
             sortable_fields=relation_sortable_fields,
             on_clauses=relation_on,
+            frontend=RelationFrontendIR(
+                menu_title=relation_cfg.get("frontend", {}).get("menuTitle", ""),
+                menu_icon=relation_cfg.get("frontend", {}).get(
+                    "menuIcon", "el-icon-connection"
+                ),
+                menu_visible=bool(
+                    relation_cfg.get("frontend", {}).get("menuVisible", True)
+                ),
+            ),
         )
         relations.append(relation_ir)
 
     if issues:
         raise ConfigError(issues)
+
+    normalized_datasource = {
+        "url": str(datasource_cfg["url"]),
+        "databaseName": str(
+            datasource_cfg.get("databaseName")
+            or _database_name_from_url(datasource_cfg["url"])
+            or ""
+        ),
+        "username": str(datasource_cfg["username"]),
+        "password": str(datasource_cfg["password"]),
+        "driverClassName": str(datasource_cfg["driverClassName"]),
+    }
 
     project_ir = ProjectIR(
         group_id=project_cfg["groupId"],
@@ -729,16 +782,20 @@ def parse_config(payload: Dict[str, Any]) -> ProjectIR:
         base_package=project_cfg["basePackage"],
         boot_version=project_cfg["bootVersion"],
         java_version=str(project_cfg["javaVersion"]),
-        datasource={
-            **datasource_cfg,
-            "databaseName": datasource_cfg.get("databaseName")
-            or _database_name_from_url(datasource_cfg["url"]),
-        },
+        datasource=normalized_datasource,
         api_prefix=global_cfg.get("apiPrefix", "/api"),
         author=global_cfg.get("author", ""),
         date_time_format=global_cfg.get("dateTimeFormat", "yyyy-MM-dd HH:mm:ss"),
         enable_swagger=bool(global_cfg.get("enableSwagger", False)),
         application_name=project_cfg["name"],
+        frontend=FrontendIR(
+            enabled=bool(frontend_cfg.get("enabled", False)),
+            framework=frontend_cfg.get("framework", "vue2"),
+            output_dir=frontend_cfg.get("outputDir", "frontend"),
+            app_title=frontend_cfg.get("appTitle") or project_cfg["name"],
+            backend_url=frontend_cfg.get("backendUrl", "http://127.0.0.1:8080"),
+            dev_port=int(frontend_cfg.get("devPort", 8081)),
+        ),
         tables=tables,
         relations=relations,
     )

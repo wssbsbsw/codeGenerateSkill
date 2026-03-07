@@ -1,0 +1,44 @@
+import Vue from "vue"
+import Router from "vue-router"
+
+import Layout from "@/layout/Layout.vue"
+
+Vue.use(Router)
+
+export default new Router({
+  mode: "hash",
+  scrollBehavior() {
+    return { x: 0, y: 0 }
+  },
+  routes: [
+    {
+      path: "/",
+      component: Layout,
+      redirect: "/dashboard",
+      children: [
+        {
+          path: "dashboard",
+          name: "Dashboard",
+          component: () => import("@/views/dashboard/index.vue"),
+          meta: { title: "Dashboard" }
+        },
+{% for page in table_pages %}        {
+          path: "{{ page.resource_name }}",
+          name: "{{ page.route_name }}",
+          component: () => import("@/views/{{ page.resource_name }}/index.vue"),
+          meta: { title: "{{ page.title }}" }
+        },
+{% endfor %}{% for page in relation_pages %}        {
+          path: "relations/{{ page.endpoint_name }}",
+          name: "{{ page.route_name }}",
+          component: () => import("@/views/relations/{{ page.endpoint_name }}/index.vue"),
+          meta: { title: "{{ page.title }}" }
+        },
+{% endfor %}      ]
+    },
+    {
+      path: "*",
+      redirect: "/dashboard"
+    }
+  ]
+})

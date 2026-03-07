@@ -182,6 +182,77 @@ class RendererTest(unittest.TestCase):
             "ex.getMessage()", exception_handler.split("handleException")[1]
         )
 
+    def test_render_vue2_frontend_project(self) -> None:
+        payload = json.loads(json.dumps(self.sample_payload))
+        payload["frontend"] = {
+            "enabled": True,
+            "framework": "vue2",
+            "outputDir": "frontend",
+            "appTitle": "Demo Admin",
+            "backendUrl": "http://127.0.0.1:8080",
+            "devPort": 8081,
+        }
+        payload["tables"][0]["frontend"] = {
+            "menuTitle": "User Center",
+            "menuIcon": "el-icon-user-solid",
+        }
+        payload["tables"][0]["fields"][1]["frontend"] = {
+            "label": "Login Name",
+            "component": "textarea",
+            "tableVisible": False,
+            "formVisible": True,
+            "detailVisible": True,
+            "queryVisible": True,
+            "placeholder": "Type username",
+        }
+        payload["tables"][0]["fields"][2]["frontend"] = {
+            "component": "select",
+            "queryComponent": "select",
+            "options": [
+                {"label": "Disabled", "value": 0},
+                {"label": "Enabled", "value": 1},
+            ],
+        }
+        payload["relations"][0]["frontend"] = {
+            "menuTitle": "Order User Report",
+            "menuIcon": "el-icon-data-analysis",
+        }
+
+        project = parse_config(payload)
+        files = CodeRenderer().render_project(project)
+
+        package_json = files["frontend/package.json"]
+        router_js = files["frontend/src/router/index.js"]
+        layout_vue = files["frontend/src/layout/Layout.vue"]
+        request_js = files["frontend/src/utils/request.js"]
+        users_api = files["frontend/src/api/users.js"]
+        orders_api = files["frontend/src/api/orders.js"]
+        users_view = files["frontend/src/views/users/index.vue"]
+        relation_view = files["frontend/src/views/relations/order-user/index.vue"]
+
+        self.assertIn('"vue": "^2.7.16"', package_json)
+        self.assertIn('"element-ui": "^2.15.14"', package_json)
+        self.assertIn("/users", router_js)
+        self.assertIn("/relations/order-user", router_js)
+        self.assertIn("User Center", layout_vue)
+        self.assertIn("el-icon-user-solid", layout_vue)
+        self.assertIn("Order User Report", layout_vue)
+        self.assertIn("response.data.code !== 0", request_js)
+        self.assertIn("/api/users", users_api)
+        self.assertIn("fetchUsersPage", users_api)
+        self.assertIn("createUser", users_api)
+        self.assertIn("fetchPageOrderWithUser", orders_api)
+        self.assertIn("el-table", users_view)
+        self.assertIn("sortBy", users_view)
+        self.assertIn("el-dialog", users_view)
+        self.assertNotIn('prop="username"', users_view)
+        self.assertIn("Login Name", users_view)
+        self.assertIn("Type username", users_view)
+        self.assertIn('label="Enabled"', users_view)
+        self.assertIn('label="Disabled"', users_view)
+        self.assertIn("textarea", users_view)
+        self.assertIn("fetchPageOrderWithUser", relation_view)
+
 
 if __name__ == "__main__":
     unittest.main()

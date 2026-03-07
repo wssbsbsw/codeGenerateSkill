@@ -1,0 +1,271 @@
+<template>
+  <div class="page-shell">
+    <section class="page-hero">
+      <h3>{{ page.title }}</h3>
+      <p>{{ page.subtitle }}</p>
+    </section>
+
+    <el-card class="page-card" shadow="never">
+      <div class="toolbar-row">
+        <div>
+          <h3>{{ page.title }}</h3>
+          <p>Search, sort, create, edit, and inspect generated records.</p>
+        </div>
+        <el-button type="primary" icon="el-icon-plus" @click="openCreate">New</el-button>
+      </div>
+
+      <el-form :inline="true" :model="queryForm" class="query-form">
+{% for field in page.query_fields %}        <el-form-item label="{{ field.label }}">
+{% if field.kind in ["text", "textarea"] %}          <el-input
+            v-model="queryForm.{{ field.property_name }}"
+            clearable
+            placeholder="{{ field.placeholder }}"
+          />
+{% elif field.kind == "select" %}          <el-select v-model="queryForm.{{ field.property_name }}" clearable placeholder="{{ field.placeholder }}">
+{% for option in field.options %}            <el-option :value="{{ option.value|tojson }}" label="{{ option.label }}" />
+{% endfor %}          </el-select>
+{% elif field.kind == "number" %}          <el-input-number
+            v-model="queryForm.{{ field.property_name }}"
+            :step="{{ field.step }}"
+            :controls="false"
+            placeholder="{{ field.placeholder }}"
+          />
+{% elif field.kind in ["date", "datetime"] %}          <el-date-picker
+            v-model="queryForm.{{ field.property_name }}"
+            type="{{ field.picker_type }}"
+            value-format="{{ field.value_format }}"
+            placeholder="{{ field.placeholder }}"
+          />
+{% elif field.kind == "boolean" %}          <el-select v-model="queryForm.{{ field.property_name }}" clearable placeholder="{{ field.placeholder }}">
+            <el-option :value="true" label="Yes" />
+            <el-option :value="false" label="No" />
+          </el-select>
+{% endif %}        </el-form-item>
+{% endfor %}{% if page.has_sorting %}        <el-form-item label="Sort By">
+          <el-select v-model="queryForm.sortBy" clearable placeholder="Select sort field">
+{% for item in page.sort_options %}            <el-option value="{{ item.request_name }}" label="{{ item.label }}" />
+{% endfor %}          </el-select>
+        </el-form-item>
+        <el-form-item label="Direction">
+          <el-select v-model="queryForm.sortDir" placeholder="Select direction">
+            <el-option value="ASC" label="Ascending" />
+            <el-option value="DESC" label="Descending" />
+          </el-select>
+        </el-form-item>
+{% endif %}        <el-form-item>
+          <el-button type="primary" icon="el-icon-search" @click="handleSearch">Search</el-button>
+          <el-button icon="el-icon-refresh-left" @click="handleReset">Reset</el-button>
+        </el-form-item>
+      </el-form>
+
+      <el-table
+        v-loading="loading"
+        :data="tableData"
+        border
+        stripe
+        @sort-change="handleSortChange"
+      >
+{% for column in page.table_columns %}        <el-table-column
+          prop="{{ column.property_name }}"
+          label="{{ column.label }}"
+{% if column.sortable %}          sortable="custom"
+{% endif %}        >
+          <template slot-scope="scope">
+{% if column.formatter == "datetime" %}            <span v-text="formatDateTime(scope.row.{{ column.property_name }})"></span>
+{% elif column.formatter == "date" %}            <span v-text="formatDate(scope.row.{{ column.property_name }})"></span>
+{% elif column.formatter == "boolean" %}            <span v-text="formatBoolean(scope.row.{{ column.property_name }})"></span>
+{% else %}            <span v-text="formatValue(scope.row.{{ column.property_name }})"></span>
+{% endif %}          </template>
+        </el-table-column>
+{% endfor %}        <el-table-column label="Actions" width="220" fixed="right">
+          <template slot-scope="scope">
+            <el-button type="text" @click="openDetail(scope.row)">Detail</el-button>
+            <el-button type="text" @click="openEdit(scope.row)">Edit</el-button>
+            <el-button type="text" style="color: #ef4444" @click="handleDelete(scope.row)">Delete</el-button>
+          </template>
+        </el-table-column>
+      </el-table>
+
+      <div class="pagination-row">
+        <el-pagination
+          background
+          layout="total, sizes, prev, pager, next"
+          :current-page="queryForm.page"
+          :page-size="queryForm.size"
+          :page-sizes="[10, 20, 50, 100]"
+          :total="total"
+          @current-change="handlePageChange"
+          @size-change="handleSizeChange"
+        />
+      </div>
+    </el-card>
+
+    <el-dialog :visible.sync="dialogVisible" :title="dialogTitle" width="720px">
+      <el-form ref="formRef" :model="formData" label-width="120px">
+{% for field in page.form_fields %}        <el-form-item label="{{ field.label }}">
+{% if field.kind == "text" %}          <el-input v-model="formData.{{ field.property_name }}" maxlength="{{ field.max_length }}" show-word-limit placeholder="{{ field.placeholder }}" />
+{% elif field.kind == "textarea" %}          <el-input v-model="formData.{{ field.property_name }}" type="textarea" :rows="4" maxlength="{{ field.max_length }}" show-word-limit placeholder="{{ field.placeholder }}" />
+{% elif field.kind == "select" %}          <el-select v-model="formData.{{ field.property_name }}" clearable placeholder="{{ field.placeholder }}">
+{% for option in field.options %}            <el-option :value="{{ option.value|tojson }}" label="{{ option.label }}" />
+{% endfor %}          </el-select>
+{% elif field.kind == "number" %}          <el-input-number v-model="formData.{{ field.property_name }}" :step="{{ field.step }}" :controls-position="right" />
+{% elif field.kind in ["date", "datetime"] %}          <el-date-picker v-model="formData.{{ field.property_name }}" type="{{ field.picker_type }}" value-format="{{ field.value_format }}" placeholder="{{ field.placeholder }}" />
+{% elif field.kind == "switch" %}          <el-switch v-model="formData.{{ field.property_name }}" />
+{% endif %}        </el-form-item>
+{% endfor %}      </el-form>
+      <span slot="footer">
+        <el-button @click="dialogVisible = false">Cancel</el-button>
+        <el-button type="primary" @click="submitForm">Save</el-button>
+      </span>
+    </el-dialog>
+
+    <el-drawer :visible.sync="detailVisible" title="Record Detail" size="40%">
+      <el-descriptions :column="1" border>
+{% for field in page.detail_fields %}        <el-descriptions-item label="{{ field.label }}">
+{% if field.formatter == "datetime" %}          <span class="detail-value" v-text="formatDateTime(detailData.{{ field.property_name }})"></span>
+{% elif field.formatter == "date" %}          <span class="detail-value" v-text="formatDate(detailData.{{ field.property_name }})"></span>
+{% elif field.formatter == "boolean" %}          <span class="detail-value" v-text="formatBoolean(detailData.{{ field.property_name }})"></span>
+{% else %}          <span class="detail-value" v-text="formatValue(detailData.{{ field.property_name }})"></span>
+{% endif %}        </el-descriptions-item>
+{% endfor %}      </el-descriptions>
+    </el-drawer>
+  </div>
+</template>
+
+<script>
+import {
+  {{ page.api_function_names['fetch_page'] }},
+  {{ page.api_function_names['fetch_one'] }},
+  {{ page.api_function_names['create'] }},
+  {{ page.api_function_names['update'] }},
+  {{ page.api_function_names['delete'] }}
+} from "@/api/{{ page.resource_name }}"
+import { formatBoolean, formatDate, formatDateTime, formatValue } from "@/utils/format"
+
+const createEmptyForm = () => ({
+{% for field in page.form_fields %}  {{ field.property_name }}: {{ field.default_js }}{% if not loop.last %},{% endif %}
+{% endfor %}})
+
+const createDefaultQuery = () => ({
+  page: 1,
+  size: 20,
+{% for field in page.query_fields %}  {{ field.property_name }}: {{ field.default_js }},
+{% endfor %}{% if page.has_sorting %}  sortBy: "",
+  sortDir: "DESC"
+{% endif %}})
+
+const sortFieldMap = {
+{% for item in page.sort_map %}  {{ item.prop|tojson }}: {{ item.request_name|tojson }}{% if not loop.last %},{% endif %}
+{% endfor %}}
+
+export default {
+  name: "{{ page.route_name }}",
+  data() {
+    return {
+      loading: false,
+      tableData: [],
+      total: 0,
+      queryForm: createDefaultQuery(),
+      dialogVisible: false,
+      dialogMode: "create",
+      dialogTitle: "New {{ page.title }}",
+      currentId: null,
+      formData: createEmptyForm(),
+      detailVisible: false,
+      detailData: {}
+    }
+  },
+  created() {
+    this.loadData()
+  },
+  methods: {
+    formatBoolean,
+    formatDate,
+    formatDateTime,
+    formatValue,
+    async loadData() {
+      this.loading = true
+      try {
+        const data = await {{ page.api_function_names['fetch_page'] }}(this.queryForm)
+        this.tableData = data.records || []
+        this.total = data.total || 0
+        this.queryForm.page = data.page || this.queryForm.page
+        this.queryForm.size = data.size || this.queryForm.size
+      } finally {
+        this.loading = false
+      }
+    },
+    handleSearch() {
+      this.queryForm.page = 1
+      this.loadData()
+    },
+    handleReset() {
+      this.queryForm = createDefaultQuery()
+      this.loadData()
+    },
+    handlePageChange(page) {
+      this.queryForm.page = page
+      this.loadData()
+    },
+    handleSizeChange(size) {
+      this.queryForm.size = size
+      this.queryForm.page = 1
+      this.loadData()
+    },
+    handleSortChange({ prop, order }) {
+{% if page.has_sorting %}      if (!order || !sortFieldMap[prop]) {
+        this.queryForm.sortBy = ""
+        this.queryForm.sortDir = "DESC"
+      } else {
+        this.queryForm.sortBy = sortFieldMap[prop]
+        this.queryForm.sortDir = order === "ascending" ? "ASC" : "DESC"
+      }
+      this.loadData()
+{% else %}      return { prop, order }
+{% endif %}    },
+    openCreate() {
+      this.dialogMode = "create"
+      this.dialogTitle = "New {{ page.title }}"
+      this.currentId = null
+      this.formData = createEmptyForm()
+      this.dialogVisible = true
+    },
+    async openEdit(row) {
+      const data = await {{ page.api_function_names['fetch_one'] }}(row.{{ page.primary_key_property }})
+      this.dialogMode = "edit"
+      this.dialogTitle = "Edit {{ page.title }}"
+      this.currentId = row.{{ page.primary_key_property }}
+      this.formData = this.normalizeFormData(data)
+      this.dialogVisible = true
+    },
+    async openDetail(row) {
+      this.detailData = await {{ page.api_function_names['fetch_one'] }}(row.{{ page.primary_key_property }})
+      this.detailVisible = true
+    },
+    normalizeFormData(data) {
+      return {
+{% for field in page.form_fields %}        {{ field.property_name }}: data.{{ field.property_name }} == null ? {{ field.default_js }} : data.{{ field.property_name }}{% if not loop.last %},{% endif %}
+{% endfor %}      }
+    },
+    async submitForm() {
+      if (this.dialogMode === "create") {
+        await {{ page.api_function_names['create'] }}(this.formData)
+        this.$message.success("Created successfully")
+      } else {
+        await {{ page.api_function_names['update'] }}(this.currentId, this.formData)
+        this.$message.success("Updated successfully")
+      }
+      this.dialogVisible = false
+      this.loadData()
+    },
+    async handleDelete(row) {
+      await this.$confirm("Delete the selected record?", "Warning", {
+        type: "warning"
+      })
+      await {{ page.api_function_names['delete'] }}(row.{{ page.primary_key_property }})
+      this.$message.success("Deleted successfully")
+      this.loadData()
+    }
+  }
+}
+</script>
