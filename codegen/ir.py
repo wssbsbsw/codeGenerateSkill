@@ -239,6 +239,7 @@ class FrontendIR:
 @dataclass(slots=True)
 class BackendIR:
     output_dir: str = "backend"
+    upload_dir: str = "uploads"
 
 
 @dataclass(slots=True)

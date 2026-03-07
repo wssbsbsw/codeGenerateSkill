@@ -111,6 +111,19 @@
 {% elif field.kind == "number" %}          <el-input-number v-model="formData.{{ field.property_name }}" :step="{{ field.step }}" :controls-position="right" />
 {% elif field.kind in ["date", "datetime"] %}          <el-date-picker v-model="formData.{{ field.property_name }}" type="{{ field.picker_type }}" value-format="{{ field.value_format }}" placeholder="{{ field.placeholder }}" />
 {% elif field.kind == "switch" %}          <el-switch v-model="formData.{{ field.property_name }}" />
+{% elif field.kind in ["image-upload", "file-upload"] %}          <el-upload
+            class="upload-demo"
+            :action="uploadUrl"
+            :headers="uploadHeaders"
+            :show-file-list="false"
+            :on-success="res => handleUploadSuccess(res, '{{ field.property_name }}')"
+            :on-error="handleUploadError"
+          >
+            <el-button size="small" type="primary">Click to upload</el-button>
+            <div v-if="formData.{{ field.property_name }}" class="el-upload__tip">
+              Uploaded: {% raw %}{{{% endraw %} formData.{{ field.property_name }} {% raw %}}}{% endraw %}
+            </div>
+          </el-upload>
 {% endif %}        </el-form-item>
 {% endfor %}      </el-form>
       <span slot="footer">
@@ -172,7 +185,13 @@ export default {
       currentId: null,
       formData: createEmptyForm(),
       detailVisible: false,
-      detailData: {}
+      detailData: {},
+      uploadUrl: (process.env.VUE_APP_BASE_API || "{{ project.api_prefix }}") + "/common/upload",
+      uploadHeaders: {
+{% if project.security.enabled %}
+        "{{ project.security.jwt.header }}": "{{ project.security.jwt.prefix }}" + (localStorage.getItem('{{ project.artifact_id }}_token') || "")
+{% endif %}
+      }
     }
   },
   created() {
@@ -183,6 +202,17 @@ export default {
     formatDate,
     formatDateTime,
     formatValue,
+    handleUploadSuccess(res, fieldName) {
+      if (res.code === 0) {
+        this.formData[fieldName] = res.data;
+        this.$message.success("Upload successful");
+      } else {
+        this.$message.error(res.message || "Upload failed");
+      }
+    },
+    handleUploadError(err) {
+      this.$message.error("Upload failed");
+    },
     async loadData() {
       this.loading = true
       try {

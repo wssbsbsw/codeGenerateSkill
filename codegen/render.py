@@ -193,6 +193,12 @@ class CodeRenderer:
         files[f"{java_root}/exception/GlobalExceptionHandler.java"] = self._render(
             "common/GlobalExceptionHandler.java.j2", **base_context
         )
+        files[f"{java_root}/common/WebMvcConfig.java"] = self._render(
+            "common/WebMvcConfig.java.j2", **base_context
+        )
+        files[f"{java_root}/common/FileController.java"] = self._render(
+            "common/FileController.java.j2", **base_context
+        )
 
         if project.security.enabled:
             files[f"{java_root}/security/WebSecurityConfig.java"] = self._render(

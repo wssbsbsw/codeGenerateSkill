@@ -864,6 +864,7 @@ def parse_config(payload: Dict[str, Any]) -> ProjectIR:
         security=security_ir,
         backend=BackendIR(
             output_dir=backend_cfg.get("outputDir", "backend"),
+            upload_dir=backend_cfg.get("uploadDir", "uploads"),
         ),
         frontend=FrontendIR(
             enabled=bool(frontend_cfg.get("enabled", False)),

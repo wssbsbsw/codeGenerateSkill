@@ -84,6 +84,7 @@ SCHEMA_V1: Dict[str, Any] = {
             "additionalProperties": False,
             "properties": {
                 "outputDir": {"type": "string", "minLength": 1},
+                "uploadDir": {"type": "string", "minLength": 1}
             },
         },
         "frontend": {
@@ -293,6 +294,8 @@ SCHEMA_V1: Dict[str, Any] = {
                                                 "date",
                                                 "datetime",
                                                 "select",
+                                                "image-upload",
+                                                "file-upload"
                                             ],
                                         },
                                         "queryComponent": {
@@ -305,6 +308,8 @@ SCHEMA_V1: Dict[str, Any] = {
                                                 "date",
                                                 "datetime",
                                                 "select",
+                                                "image-upload",
+                                                "file-upload"
                                             ],
                                         },
                                         "tableVisible": {
