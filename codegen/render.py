@@ -200,6 +200,11 @@ class CodeRenderer:
             "common/FileController.java.j2", **base_context
         )
 
+        if project.tenant.enabled:
+            files[f"{java_root}/common/TenantContextHolder.java"] = self._render(
+                "common/TenantContextHolder.java.j2", **base_context
+            )
+
         if project.security.enabled:
             files[f"{java_root}/security/WebSecurityConfig.java"] = self._render(
                 "security/WebSecurityConfig.java.j2", **base_context

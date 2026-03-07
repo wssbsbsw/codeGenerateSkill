@@ -488,6 +488,14 @@ SCHEMA_V1: Dict[str, Any] = {
                 "author": {"type": "string"},
                 "dateTimeFormat": {"type": "string", "default": "yyyy-MM-dd HH:mm:ss"},
                 "enableSwagger": {"type": "boolean", "default": False},
+                "tenant": {
+                    "type": "object",
+                    "additionalProperties": False,
+                    "properties": {
+                        "enabled": {"type": "boolean", "default": False},
+                        "column": {"type": "string", "default": "tenant_id"}
+                    }
+                }
             },
         },
     },

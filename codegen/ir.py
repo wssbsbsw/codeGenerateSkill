@@ -243,6 +243,12 @@ class BackendIR:
 
 
 @dataclass(slots=True)
+class TenantIR:
+    enabled: bool = False
+    column: str = "tenant_id"
+
+
+@dataclass(slots=True)
 class ProjectIR:
     group_id: str
     artifact_id: str
@@ -256,6 +262,7 @@ class ProjectIR:
     date_time_format: str
     enable_swagger: bool
     application_name: str
+    tenant: TenantIR = field(default_factory=TenantIR)
     security: SecurityIR = field(default_factory=SecurityIR)
     backend: BackendIR = field(default_factory=BackendIR)
     frontend: FrontendIR = field(default_factory=FrontendIR)

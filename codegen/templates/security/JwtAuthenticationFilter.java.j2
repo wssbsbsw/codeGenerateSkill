@@ -51,8 +51,33 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                         userDetails, null, userDetails.getAuthorities());
                 authenticationToken.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
                 SecurityContextHolder.getContext().setAuthentication(authenticationToken);
+                
+{% if project.tenant.enabled %}
+                try {
+                    // Extract tenant ID from token claims or headers (e.g. X-Tenant-Id)
+                    // We assume it's stored as a custom claim "tenantId" or passed via header
+                    String tenantHeader = request.getHeader("X-Tenant-Id");
+                    if (tenantHeader != null && !tenantHeader.isEmpty()) {
+                        {{ package }}.common.TenantContextHolder.setTenantId(Long.parseLong(tenantHeader));
+                    } else {
+                        Object tenantClaim = jwtTokenUtil.getClaimFromToken(jwtToken, claims -> claims.get("tenantId"));
+                        if (tenantClaim != null) {
+                            {{ package }}.common.TenantContextHolder.setTenantId(Long.parseLong(tenantClaim.toString()));
+                        }
+                    }
+                } catch (Exception e) {
+                    logger.error("Failed to extract tenant ID", e);
+                }
+{% endif %}
             }
         }
-        chain.doFilter(request, response);
+        
+        try {
+            chain.doFilter(request, response);
+        } finally {
+{% if project.tenant.enabled %}
+            {{ package }}.common.TenantContextHolder.clear();
+{% endif %}
+        }
     }
 }

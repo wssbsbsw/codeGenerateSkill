@@ -29,6 +29,7 @@ from .ir import (
     RbacConfigIR,
     TableAuthIR,
     PermissionIR,
+    TenantIR,
 )
 from .schema import validate_schema
 from .type_mapping import db_to_java, snake_to_camel, snake_to_pascal
@@ -861,6 +862,10 @@ def parse_config(payload: Dict[str, Any]) -> ProjectIR:
         date_time_format=global_cfg.get("dateTimeFormat", "yyyy-MM-dd HH:mm:ss"),
         enable_swagger=bool(global_cfg.get("enableSwagger", False)),
         application_name=project_cfg["name"],
+        tenant=TenantIR(
+            enabled=bool(global_cfg.get("tenant", {}).get("enabled", False)),
+            column=str(global_cfg.get("tenant", {}).get("column", "tenant_id")),
+        ),
         security=security_ir,
         backend=BackendIR(
             output_dir=backend_cfg.get("outputDir", "backend"),
