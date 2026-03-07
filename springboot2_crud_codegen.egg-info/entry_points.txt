@@ -1,2 +1,0 @@
-[console_scripts]
-codegen = codegen.cli:main

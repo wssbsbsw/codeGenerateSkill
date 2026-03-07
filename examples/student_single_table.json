@@ -1,0 +1,303 @@
+{
+  "project": {
+    "groupId": "com.example",
+    "artifactId": "student-management-single",
+    "name": "student-management-single",
+    "basePackage": "com.example.student",
+    "bootVersion": "2.7.18",
+    "javaVersion": 8
+  },
+  "datasource": {
+    "url": "jdbc:mysql://127.0.0.1:3306/student_management?useSSL=false&serverTimezone=UTC&characterEncoding=UTF-8",
+    "databaseName": "student_management",
+    "username": "root",
+    "password": "root",
+    "driverClassName": "com.mysql.cj.jdbc.Driver"
+  },
+  "backend": {
+    "outputDir": "backend"
+  },
+  "frontend": {
+    "enabled": true,
+    "framework": "vue2",
+    "locale": "zh-CN",
+    "outputDir": "frontend",
+    "appTitle": "学生管理系统",
+    "backendUrl": "http://127.0.0.1:8080",
+    "devPort": 8081
+  },
+  "tables": [
+    {
+      "name": "students",
+      "comment": "学生信息",
+      "entityName": "Student",
+      "primaryKey": "id",
+      "queryableFields": [
+        {
+          "name": "student_no",
+          "operator": "LIKE"
+        },
+        {
+          "name": "name",
+          "operator": "LIKE"
+        },
+        {
+          "name": "gender",
+          "operator": "EQ"
+        },
+        {
+          "name": "status",
+          "operator": "EQ"
+        }
+      ],
+      "sortableFields": [
+        "id",
+        "student_no",
+        "name",
+        "enrolled_at",
+        "created_at"
+      ],
+      "frontend": {
+        "menuTitle": "学生信息",
+        "menuIcon": "el-icon-user-solid",
+        "menuVisible": true
+      },
+      "seedData": [
+        {
+          "id": 1,
+          "student_no": "S2026001",
+          "name": "张三",
+          "gender": 1,
+          "age": 18,
+          "phone": "13800000001",
+          "email": "zhangsan@example.com",
+          "enrolled_at": "2026-09-01",
+          "status": 1,
+          "deleted": 0,
+          "created_at": "2026-03-01 10:00:00",
+          "updated_at": "2026-03-01 10:00:00"
+        },
+        {
+          "id": 2,
+          "student_no": "S2026002",
+          "name": "李四",
+          "gender": 0,
+          "age": 19,
+          "phone": "13800000002",
+          "email": "lisi@example.com",
+          "enrolled_at": "2026-09-01",
+          "status": 1,
+          "deleted": 0,
+          "created_at": "2026-03-01 10:05:00",
+          "updated_at": "2026-03-01 10:05:00"
+        }
+      ],
+      "fields": [
+        {
+          "name": "id",
+          "type": "bigint",
+          "nullable": false,
+          "comment": "主键",
+          "idType": "AUTO"
+        },
+        {
+          "name": "student_no",
+          "type": "varchar(32)",
+          "nullable": false,
+          "comment": "学号",
+          "unique": true,
+          "frontend": {
+            "label": "学号",
+            "component": "text",
+            "queryComponent": "text",
+            "tableVisible": true,
+            "formVisible": true,
+            "detailVisible": true,
+            "queryVisible": true,
+            "placeholder": "请输入学号"
+          }
+        },
+        {
+          "name": "name",
+          "type": "varchar(64)",
+          "nullable": false,
+          "comment": "姓名",
+          "frontend": {
+            "label": "姓名",
+            "component": "text",
+            "queryComponent": "text",
+            "tableVisible": true,
+            "formVisible": true,
+            "detailVisible": true,
+            "queryVisible": true,
+            "placeholder": "请输入姓名"
+          }
+        },
+        {
+          "name": "gender",
+          "type": "tinyint",
+          "nullable": false,
+          "comment": "性别",
+          "frontend": {
+            "label": "性别",
+            "component": "select",
+            "queryComponent": "select",
+            "tableVisible": true,
+            "formVisible": true,
+            "detailVisible": true,
+            "queryVisible": true,
+            "placeholder": "请选择性别",
+            "options": [
+              {
+                "label": "女",
+                "value": 0
+              },
+              {
+                "label": "男",
+                "value": 1
+              }
+            ]
+          }
+        },
+        {
+          "name": "age",
+          "type": "int",
+          "nullable": false,
+          "comment": "年龄",
+          "frontend": {
+            "label": "年龄",
+            "component": "number",
+            "queryComponent": "number",
+            "tableVisible": true,
+            "formVisible": true,
+            "detailVisible": true,
+            "queryVisible": false,
+            "placeholder": "请输入年龄"
+          }
+        },
+        {
+          "name": "phone",
+          "type": "varchar(20)",
+          "nullable": false,
+          "comment": "手机号",
+          "frontend": {
+            "label": "手机号",
+            "component": "text",
+            "queryComponent": "text",
+            "tableVisible": true,
+            "formVisible": true,
+            "detailVisible": true,
+            "queryVisible": false,
+            "placeholder": "请输入手机号"
+          }
+        },
+        {
+          "name": "email",
+          "type": "varchar(100)",
+          "nullable": true,
+          "comment": "邮箱",
+          "frontend": {
+            "label": "邮箱",
+            "component": "text",
+            "queryComponent": "text",
+            "tableVisible": true,
+            "formVisible": true,
+            "detailVisible": true,
+            "queryVisible": false,
+            "placeholder": "请输入邮箱"
+          }
+        },
+        {
+          "name": "enrolled_at",
+          "type": "date",
+          "nullable": false,
+          "comment": "入学日期",
+          "frontend": {
+            "label": "入学日期",
+            "component": "date",
+            "queryComponent": "date",
+            "tableVisible": true,
+            "formVisible": true,
+            "detailVisible": true,
+            "queryVisible": false,
+            "placeholder": "请选择入学日期"
+          }
+        },
+        {
+          "name": "status",
+          "type": "tinyint",
+          "nullable": false,
+          "comment": "状态",
+          "frontend": {
+            "label": "状态",
+            "component": "select",
+            "queryComponent": "select",
+            "tableVisible": true,
+            "formVisible": true,
+            "detailVisible": true,
+            "queryVisible": true,
+            "placeholder": "请选择状态",
+            "options": [
+              {
+                "label": "禁用",
+                "value": 0
+              },
+              {
+                "label": "正常",
+                "value": 1
+              }
+            ]
+          }
+        },
+        {
+          "name": "deleted",
+          "type": "tinyint",
+          "nullable": false,
+          "comment": "逻辑删除",
+          "logicDelete": true,
+          "frontend": {
+            "tableVisible": false,
+            "formVisible": false,
+            "detailVisible": false,
+            "queryVisible": false
+          }
+        },
+        {
+          "name": "created_at",
+          "type": "datetime",
+          "nullable": false,
+          "comment": "创建时间",
+          "autoFill": "INSERT",
+          "frontend": {
+            "label": "创建时间",
+            "tableVisible": true,
+            "formVisible": false,
+            "detailVisible": true,
+            "queryVisible": false
+          }
+        },
+        {
+          "name": "updated_at",
+          "type": "datetime",
+          "nullable": false,
+          "comment": "更新时间",
+          "autoFill": "INSERT_UPDATE",
+          "frontend": {
+            "label": "更新时间",
+            "tableVisible": true,
+            "formVisible": false,
+            "detailVisible": true,
+            "queryVisible": false
+          }
+        }
+      ]
+    }
+  ],
+  "relations": [],
+  "global": {
+    "apiPrefix": "/api",
+    "author": "OpenCode",
+    "dateTimeFormat": "yyyy-MM-dd HH:mm:ss",
+    "enableSwagger": false
+  }
+}
