@@ -1,0 +1,10 @@
+package {{ package }}.dto;
+
+{% for item in dto_imports %}import {{ item }};
+{% endfor %}import lombok.Data;
+
+@Data
+public class {{ relation.dto_name }} {
+{% for item in relation.select_items %}    private {{ item.java_type }} {{ item.alias }};
+{% endfor %}
+}

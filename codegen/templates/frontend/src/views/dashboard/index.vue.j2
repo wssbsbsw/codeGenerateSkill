@@ -1,0 +1,47 @@
+<template>
+  <div class="page-shell">
+    <section class="dashboard-hero">
+      <h2>{{ frontend.app_title }}</h2>
+      <p>{{ messages.dashboard_hero_subtitle }}</p>
+    </section>
+
+    <section class="dashboard-grid">
+{% for card in dashboard_cards %}      <el-card class="dashboard-card" shadow="never">
+        <div class="card-header">
+          <div>
+            <h3>{{ card.title }}</h3>
+            <p>{{ card.description }}</p>
+          </div>
+          <i class="{{ card.icon }}"></i>
+        </div>
+        <div class="dashboard-value">{{ card.value }}</div>
+      </el-card>
+{% endfor %}    </section>
+
+    <el-card class="dashboard-links" shadow="never">
+      <div class="card-header">
+        <div>
+          <h3>{{ messages.dashboard_quick_nav_title }}</h3>
+          <p>{{ messages.dashboard_quick_nav_description }}</p>
+        </div>
+      </div>
+
+      <div class="dashboard-link-list">
+{% for page in table_pages %}        <router-link to="{{ page.route_path }}" class="dashboard-link-item">
+          <span>{{ page.title }}</span>
+          <i class="el-icon-arrow-right"></i>
+        </router-link>
+{% endfor %}{% for page in relation_pages %}        <router-link to="{{ page.route_path }}" class="dashboard-link-item">
+          <span>{{ page.title }}</span>
+          <i class="el-icon-arrow-right"></i>
+        </router-link>
+{% endfor %}      </div>
+    </el-card>
+  </div>
+</template>
+
+<script>
+export default {
+  name: "DashboardPage"
+}
+</script>

@@ -1,0 +1,134 @@
+<template>
+  <div class="page-shell">
+    <section class="page-hero">
+      <h3>{{ page.title }}</h3>
+      <p>{{ page.subtitle }}</p>
+    </section>
+
+    <el-card class="page-card" shadow="never">
+      <div class="toolbar-row">
+        <div>
+          <h3>{{ page.title }}</h3>
+          <p>{{ messages.relation_toolbar_description }}</p>
+        </div>
+      </div>
+
+      <el-form :inline="true" :model="queryForm" class="query-form">
+{% for field in page.query_fields %}        <el-form-item label="{{ field.label }}">
+{% if field.kind in ["text", "textarea"] %}          <el-input v-model="queryForm.{{ field.property_name }}" clearable placeholder="{{ field.placeholder }}" />
+{% elif field.kind == "select" %}          <el-select v-model="queryForm.{{ field.property_name }}" clearable placeholder="{{ field.placeholder }}">
+{% for option in field.options %}            <el-option :value="{{ option.value|tojson }}" label="{{ option.label }}" />
+{% endfor %}          </el-select>
+{% elif field.kind == "number" %}          <el-input-number v-model="queryForm.{{ field.property_name }}" :step="{{ field.step }}" :controls="false" />
+{% elif field.kind in ["date", "datetime"] %}          <el-date-picker v-model="queryForm.{{ field.property_name }}" type="{{ field.picker_type }}" value-format="{{ field.value_format }}" placeholder="{{ field.placeholder }}" />
+{% elif field.kind == "boolean" %}          <el-select v-model="queryForm.{{ field.property_name }}" clearable placeholder="{{ field.placeholder }}">
+            <el-option :value="true" label="{{ messages.boolean_yes }}" />
+            <el-option :value="false" label="{{ messages.boolean_no }}" />
+          </el-select>
+{% endif %}        </el-form-item>
+{% endfor %}{% if page.has_sorting %}        <el-form-item label="{{ messages.sort_by }}">
+          <el-select v-model="queryForm.sortBy" clearable placeholder="{{ messages.sort_by_placeholder }}">
+{% for item in page.sort_options %}            <el-option value="{{ item.request_name }}" label="{{ item.label }}" />
+{% endfor %}          </el-select>
+        </el-form-item>
+        <el-form-item label="{{ messages.sort_direction }}">
+          <el-select v-model="queryForm.sortDir" placeholder="{{ messages.sort_direction_placeholder }}">
+            <el-option value="ASC" label="{{ messages.sort_ascending }}" />
+            <el-option value="DESC" label="{{ messages.sort_descending }}" />
+          </el-select>
+        </el-form-item>
+{% endif %}        <el-form-item>
+          <el-button type="primary" icon="el-icon-search" @click="handleSearch">{{ messages.button_search }}</el-button>
+          <el-button icon="el-icon-refresh-left" @click="handleReset">{{ messages.button_reset }}</el-button>
+        </el-form-item>
+      </el-form>
+
+      <el-table v-loading="loading" :data="tableData" border stripe>
+{% for column in page.columns %}        <el-table-column prop="{{ column.property_name }}" label="{{ column.label }}">
+          <template slot-scope="scope">
+{% if column.formatter == "datetime" %}            <span v-text="formatDateTime(scope.row.{{ column.property_name }})"></span>
+{% elif column.formatter == "date" %}            <span v-text="formatDate(scope.row.{{ column.property_name }})"></span>
+{% elif column.formatter == "boolean" %}            <span v-text="formatBoolean(scope.row.{{ column.property_name }})"></span>
+{% else %}            <span v-text="formatValue(scope.row.{{ column.property_name }})"></span>
+{% endif %}          </template>
+        </el-table-column>
+{% endfor %}      </el-table>
+
+      <div class="pagination-row">
+        <el-pagination
+          background
+          layout="total, sizes, prev, pager, next"
+          :current-page="queryForm.page"
+          :page-size="queryForm.size"
+          :page-sizes="[10, 20, 50, 100]"
+          :total="total"
+          @current-change="handlePageChange"
+          @size-change="handleSizeChange"
+        />
+      </div>
+    </el-card>
+  </div>
+</template>
+
+<script>
+import { {{ page.api_function_name }} } from "@/api/{{ page.api_import_file }}"
+import { formatBoolean, formatDate, formatDateTime, formatValue } from "@/utils/format"
+
+const createDefaultQuery = () => ({
+  page: 1,
+  size: 20,
+{% for field in page.query_fields %}  {{ field.property_name }}: {{ field.default_js }},
+{% endfor %}{% if page.has_sorting %}  sortBy: "",
+  sortDir: "DESC"
+{% endif %}})
+
+export default {
+  name: "{{ page.route_name }}",
+  data() {
+    return {
+      loading: false,
+      tableData: [],
+      total: 0,
+      queryForm: createDefaultQuery()
+    }
+  },
+  created() {
+    this.loadData()
+  },
+  methods: {
+    formatBoolean,
+    formatDate,
+    formatDateTime,
+    formatValue,
+    async loadData() {
+      this.loading = true
+      try {
+        const data = await {{ page.api_function_name }}(this.queryForm)
+        this.tableData = data.records || []
+        this.total = data.total || 0
+        this.queryForm.page = data.page || this.queryForm.page
+        this.queryForm.size = data.size || this.queryForm.size
+      } finally {
+        this.loading = false
+      }
+    },
+    handleSearch() {
+      this.queryForm.page = 1
+      this.loadData()
+    },
+    handleReset() {
+      this.queryForm = createDefaultQuery()
+      this.loadData()
+    },
+    handlePageChange(page) {
+      this.queryForm.page = page
+      this.loadData()
+    },
+    handleSizeChange(size) {
+      this.queryForm.size = size
+      this.queryForm.page = 1
+      this.loadData()
+    }
+  }
+}
+</script>

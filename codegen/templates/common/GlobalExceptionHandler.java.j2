@@ -1,0 +1,73 @@
+package {{ package }}.exception;
+
+import {{ package }}.common.ErrorCode;
+import {{ package }}.common.Result;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.validation.BindException;
+import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.bind.annotation.ExceptionHandler;
+import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
+
+@RestControllerAdvice
+public class GlobalExceptionHandler {
+
+    private static final Logger log = LoggerFactory.getLogger(GlobalExceptionHandler.class);
+
+    @ExceptionHandler(MethodArgumentNotValidException.class)
+    public Result<Void> handleValidationException(MethodArgumentNotValidException ex) {
+        String message = ex.getBindingResult().getAllErrors().stream()
+                .findFirst()
+                .map(item -> item.getDefaultMessage())
+                .orElse(ErrorCode.BAD_REQUEST.getMessage());
+        return Result.failure(ErrorCode.BAD_REQUEST, message);
+    }
+
+    @ExceptionHandler(BindException.class)
+    public Result<Void> handleBindException(BindException ex) {
+        String message = ex.getBindingResult().getAllErrors().stream()
+                .findFirst()
+                .map(item -> item.getDefaultMessage())
+                .orElse(ErrorCode.BAD_REQUEST.getMessage());
+        return Result.failure(ErrorCode.BAD_REQUEST, message);
+    }
+
+    @ExceptionHandler(MethodArgumentTypeMismatchException.class)
+    public Result<Void> handleTypeMismatch(MethodArgumentTypeMismatchException ex) {
+        return Result.failure(ErrorCode.BAD_REQUEST, ErrorCode.BAD_REQUEST.getMessage());
+    }
+
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    public Result<Void> handleUnreadable(HttpMessageNotReadableException ex) {
+        return Result.failure(ErrorCode.BAD_REQUEST, ErrorCode.BAD_REQUEST.getMessage());
+    }
+
+    @ExceptionHandler(BizException.class)
+    public Result<Void> handleBizException(BizException ex) {
+        log.warn("Business exception", ex);
+        return Result.failure(ex.getErrorCode(), ex.getMessage());
+    }
+
+    @ExceptionHandler(IllegalArgumentException.class)
+    public Result<Void> handleIllegalArgument(IllegalArgumentException ex) {
+        return Result.failure(ErrorCode.BAD_REQUEST, ex.getMessage());
+    }
+
+    @ExceptionHandler(DataIntegrityViolationException.class)
+    public Result<Void> handleDataIntegrityViolation(DataIntegrityViolationException ex) {
+        log.warn("Data integrity violation", ex);
+        return Result.failure(
+                ErrorCode.BAD_REQUEST,
+                "operation failed due to related data constraints"
+        );
+    }
+
+    @ExceptionHandler(Exception.class)
+    public Result<Void> handleException(Exception ex) {
+        log.error("Unhandled exception", ex);
+        return Result.failure(ErrorCode.INTERNAL_ERROR);
+    }
+}

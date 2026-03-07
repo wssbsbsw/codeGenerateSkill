@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="{{ package }}.mapper.{{ table.mapper_name }}">
+{% for relation in mapper_relation_context %}
+    <select id="{{ relation.method_name }}" resultType="{{ package }}.dto.{{ relation.dto_name }}">
+        SELECT
+{% for item in relation.select_sql %}            {{ item }}{% if not loop.last %},{% endif %}
+{% endfor %}        FROM {{ relation.left_table }} l
+        {{ relation.join_type }} JOIN {{ relation.right_table }} r ON
+{% for item in relation.on_sql %}            {{ item }}{% if not loop.last %}
+            AND{% endif %}
+{% endfor %}{% if relation.where_items %}
+        WHERE 1 = 1
+{% for where_item in relation.where_items %}        <if test="{{ where_item.test }}">
+            AND {{ where_item.condition }}
+        </if>
+{% endfor %}{% endif %}{% if relation.has_sorting %}
+        <choose>
+{% for sort_item in relation.sort_items %}            <when test="query.sortBy == '{{ sort_item.request_name }}'">
+                ORDER BY {{ sort_item.column_sql }}
+                <choose>
+                    <when test="query.sortDir != null and (query.sortDir == 'ASC' or query.sortDir == 'asc')">ASC</when>
+                    <otherwise>DESC</otherwise>
+                </choose>
+            </when>
+{% endfor %}        </choose>
+{% endif %}
+    </select>
+{% endfor %}
+</mapper>

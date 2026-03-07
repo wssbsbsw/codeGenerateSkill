@@ -1,0 +1,127 @@
+package {{ package }}.service.impl;
+
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.metadata.IPage;
+import com.baomidou.mybatisplus.core.toolkit.Wrappers;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import {{ package }}.common.PageResult;
+import {{ package }}.dto.{{ table.create_dto_name }};
+import {{ package }}.dto.{{ table.query_dto_name }};
+import {{ package }}.dto.{{ table.update_dto_name }};
+import {{ package }}.entity.{{ table.entity_name }};
+import {{ package }}.exception.NotFoundException;
+import {{ package }}.mapper.{{ table.mapper_name }};
+import {{ package }}.service.{{ table.service_name }};
+{% for relation in relation_methods %}import {{ package }}.dto.{{ relation.dto_name }};
+import {{ package }}.dto.{{ relation.query_name }};
+{% endfor %}import org.springframework.beans.BeanUtils;
+import org.springframework.stereotype.Service;
+import org.springframework.util.StringUtils;
+
+@Service
+public class {{ table.service_impl_name }} implements {{ table.service_name }} {
+
+    private final {{ table.mapper_name }} {{ table.object_name }}Mapper;
+
+    public {{ table.service_impl_name }}({{ table.mapper_name }} {{ table.object_name }}Mapper) {
+        this.{{ table.object_name }}Mapper = {{ table.object_name }}Mapper;
+    }
+
+    @Override
+    public {{ table.primary_key_java_type }} create({{ table.create_dto_name }} request) {
+        {{ table.entity_name }} entity = new {{ table.entity_name }}();
+        BeanUtils.copyProperties(request, entity);
+        {{ table.object_name }}Mapper.insert(entity);
+        return entity.get{{ table.primary_key_property[:1].upper() + table.primary_key_property[1:] }}();
+    }
+
+    @Override
+    public {{ table.entity_name }} getById({{ table.primary_key_java_type }} id) {
+        {{ table.entity_name }} entity = {{ table.object_name }}Mapper.selectById(id);
+        if (entity == null) {
+            throw new NotFoundException("resource not found: " + id);
+        }
+        return entity;
+    }
+
+    @Override
+    public boolean update({{ table.primary_key_java_type }} id, {{ table.update_dto_name }} request) {
+        {{ table.entity_name }} entity = new {{ table.entity_name }}();
+        BeanUtils.copyProperties(request, entity);
+        entity.set{{ table.primary_key_property[:1].upper() + table.primary_key_property[1:] }}(id);
+        return {{ table.object_name }}Mapper.updateById(entity) > 0;
+    }
+
+    @Override
+    public boolean deleteById({{ table.primary_key_java_type }} id) {
+        return {{ table.object_name }}Mapper.deleteById(id) > 0;
+    }
+
+    @Override
+    public PageResult<{{ table.entity_name }}> page({{ table.query_dto_name }} query) {
+        long pageNo = query.getPage() == null || query.getPage() < 1 ? 1L : query.getPage();
+        long pageSize = query.getSize() == null || query.getSize() < 1 ? 20L : query.getSize();
+
+        Page<{{ table.entity_name }}> pageData = new Page<>(pageNo, pageSize);
+        LambdaQueryWrapper<{{ table.entity_name }}> wrapper = Wrappers.lambdaQuery();
+{% for field in query_fields %}{% if field.operator == "LIKE" %}
+        if (StringUtils.hasText(query.get{{ field.method_suffix }}())) {
+            wrapper.like({{ table.entity_name }}::get{{ field.method_suffix }}, query.get{{ field.method_suffix }}());
+        }
+{% elif field.operator == "NE" %}{% if field.is_string %}
+        if (StringUtils.hasText(query.get{{ field.method_suffix }}())) {
+            wrapper.ne({{ table.entity_name }}::get{{ field.method_suffix }}, query.get{{ field.method_suffix }}());
+        }
+{% else %}
+        if (query.get{{ field.method_suffix }}() != null) {
+            wrapper.ne({{ table.entity_name }}::get{{ field.method_suffix }}, query.get{{ field.method_suffix }}());
+        }
+{% endif %}{% elif field.operator == "GT" %}
+        if (query.get{{ field.method_suffix }}() != null) {
+            wrapper.gt({{ table.entity_name }}::get{{ field.method_suffix }}, query.get{{ field.method_suffix }}());
+        }
+{% elif field.operator == "GE" %}
+        if (query.get{{ field.method_suffix }}() != null) {
+            wrapper.ge({{ table.entity_name }}::get{{ field.method_suffix }}, query.get{{ field.method_suffix }}());
+        }
+{% elif field.operator == "LT" %}
+        if (query.get{{ field.method_suffix }}() != null) {
+            wrapper.lt({{ table.entity_name }}::get{{ field.method_suffix }}, query.get{{ field.method_suffix }}());
+        }
+{% elif field.operator == "LE" %}
+        if (query.get{{ field.method_suffix }}() != null) {
+            wrapper.le({{ table.entity_name }}::get{{ field.method_suffix }}, query.get{{ field.method_suffix }}());
+        }
+{% else %}{% if field.is_string %}
+        if (StringUtils.hasText(query.get{{ field.method_suffix }}())) {
+            wrapper.eq({{ table.entity_name }}::get{{ field.method_suffix }}, query.get{{ field.method_suffix }}());
+        }
+{% else %}
+        if (query.get{{ field.method_suffix }}() != null) {
+            wrapper.eq({{ table.entity_name }}::get{{ field.method_suffix }}, query.get{{ field.method_suffix }}());
+        }
+{% endif %}{% endif %}{% endfor %}
+{% if has_sorting %}
+        boolean ascending = "ASC".equalsIgnoreCase(query.getSortDir());
+{% for field in sortable_fields %}
+        if ("{{ field.request_name }}".equals(query.getSortBy())) {
+            wrapper.orderBy(true, ascending, {{ table.entity_name }}::get{{ field.method_suffix }});
+        }
+{% endfor %}
+{% endif %}
+
+        IPage<{{ table.entity_name }}> result = {{ table.object_name }}Mapper.selectPage(pageData, wrapper);
+        return PageResult.of(result);
+    }
+{% for relation in relation_methods %}
+    @Override
+    public PageResult<{{ relation.dto_name }}> {{ relation.method_name }}({{ relation.query_name }} query) {
+        long pageNo = query.getPage() == null || query.getPage() < 1 ? 1L : query.getPage();
+        long pageSize = query.getSize() == null || query.getSize() < 1 ? 20L : query.getSize();
+
+        Page<{{ relation.dto_name }}> pageData = new Page<>(pageNo, pageSize);
+        IPage<{{ relation.dto_name }}> result = {{ table.object_name }}Mapper.{{ relation.method_name }}(pageData, query);
+        return PageResult.of(result);
+    }
+{% endfor %}
+}

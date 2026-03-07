@@ -1,0 +1,27 @@
+export function formatDateTime(value) {
+  if (!value) {
+    return "--"
+  }
+  return String(value).replace("T", " ")
+}
+
+export function formatDate(value) {
+  if (!value) {
+    return "--"
+  }
+  return String(value)
+}
+
+export function formatBoolean(value) {
+  if (value === null || value === undefined) {
+    return "--"
+  }
+  return value ? "{{ messages.boolean_yes }}" : "{{ messages.boolean_no }}"
+}
+
+export function formatValue(value) {
+  if (value === null || value === undefined || value === "") {
+    return "--"
+  }
+  return value
+}

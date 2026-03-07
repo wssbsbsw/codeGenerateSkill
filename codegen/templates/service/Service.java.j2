@@ -1,0 +1,24 @@
+package {{ package }}.service;
+
+import {{ package }}.common.PageResult;
+import {{ package }}.dto.{{ table.create_dto_name }};
+import {{ package }}.dto.{{ table.query_dto_name }};
+import {{ package }}.dto.{{ table.update_dto_name }};
+import {{ package }}.entity.{{ table.entity_name }};
+{% for relation in relation_methods %}import {{ package }}.dto.{{ relation.dto_name }};
+import {{ package }}.dto.{{ relation.query_name }};
+{% endfor %}
+public interface {{ table.service_name }} {
+    {{ table.primary_key_java_type }} create({{ table.create_dto_name }} request);
+
+    {{ table.entity_name }} getById({{ table.primary_key_java_type }} id);
+
+    boolean update({{ table.primary_key_java_type }} id, {{ table.update_dto_name }} request);
+
+    boolean deleteById({{ table.primary_key_java_type }} id);
+
+    PageResult<{{ table.entity_name }}> page({{ table.query_dto_name }} query);
+{% for relation in relation_methods %}
+    PageResult<{{ relation.dto_name }}> {{ relation.method_name }}({{ relation.query_name }} query);
+{% endfor %}
+}

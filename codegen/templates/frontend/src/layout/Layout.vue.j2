@@ -1,0 +1,65 @@
+<template>
+  <div class="layout-shell">
+    <aside class="layout-sidebar">
+      <div class="brand-block">
+        <div class="brand-mark">SB</div>
+        <div>
+          <h1 class="brand-title">{{ frontend.app_title }}</h1>
+          <p class="brand-subtitle">{{ messages.layout_brand_subtitle }}</p>
+        </div>
+      </div>
+
+      <el-menu
+        :default-active="$route.path"
+        router
+        class="sidebar-menu"
+        background-color="transparent"
+        text-color="#d8e1eb"
+        active-text-color="#ffffff"
+      >
+        <el-menu-item index="/dashboard">
+          <i class="el-icon-data-board"></i>
+          <span slot="title">{{ messages.dashboard_title }}</span>
+        </el-menu-item>
+
+{% for group in menu_groups %}        <el-submenu index="menu-group-{{ loop.index }}">
+          <template slot="title">
+            <i class="{{ group['icon'] }}"></i>
+            <span>{{ group['title'] }}</span>
+          </template>
+{% for item in group['items'] %}          <el-menu-item index="{{ item['path'] }}">
+            <i class="{{ item['icon'] }}"></i>
+            <span slot="title">{{ item['title'] }}</span>
+          </el-menu-item>
+{% endfor %}        </el-submenu>
+{% endfor %}      </el-menu>
+    </aside>
+
+    <section class="layout-main">
+      <header class="layout-header">
+        <div>
+          <h2 class="layout-title" v-text="currentTitle"></h2>
+          <p class="layout-caption">{{ messages.layout_caption|replace("{artifact_id}", project.artifact_id) }}</p>
+        </div>
+        <div class="layout-chip">API {{ project.api_prefix }}</div>
+      </header>
+
+      <main class="layout-content">
+        <router-view />
+      </main>
+    </section>
+  </div>
+</template>
+
+<script>
+export default {
+  name: "Layout",
+  computed: {
+    currentTitle() {
+      return this.$route.meta && this.$route.meta.title
+        ? this.$route.meta.title
+        : "{{ frontend.app_title }}"
+    }
+  }
+}
+</script>

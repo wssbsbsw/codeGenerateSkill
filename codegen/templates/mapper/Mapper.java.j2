@@ -1,0 +1,15 @@
+package {{ package }}.mapper;
+
+import com.baomidou.mybatisplus.core.mapper.BaseMapper;
+{% if table_relations %}import com.baomidou.mybatisplus.core.metadata.IPage;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+{% for relation in table_relations %}import {{ package }}.dto.{{ relation.dto_name }};
+import {{ package }}.dto.{{ relation.query_name }};
+{% endfor %}import org.apache.ibatis.annotations.Param;
+{% endif %}import {{ package }}.entity.{{ table.entity_name }};
+
+public interface {{ table.mapper_name }} extends BaseMapper<{{ table.entity_name }}> {
+{% for relation in table_relations %}
+    IPage<{{ relation.dto_name }}> {{ relation.method_name }}(Page<{{ relation.dto_name }}> page, @Param("query") {{ relation.query_name }} query);
+{% endfor %}
+}

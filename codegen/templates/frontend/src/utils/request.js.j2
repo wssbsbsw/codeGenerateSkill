@@ -1,0 +1,29 @@
+import axios from "axios"
+import { Message } from "element-ui"
+
+const service = axios.create({
+  baseURL: process.env.VUE_APP_BASE_API || "{{ project.api_prefix }}",
+  timeout: 15000
+})
+
+service.interceptors.response.use(
+  (response) => {
+    const payload = response.data
+    if (!payload) {
+      Message.error("{{ messages.request_empty_response }}")
+      return Promise.reject(new Error("{{ messages.request_empty_response }}"))
+    }
+    if (response.data.code !== 0) {
+      Message.error(payload.message || "{{ messages.request_failed }}")
+      return Promise.reject(new Error(payload.message || "{{ messages.request_failed }}"))
+    }
+    return payload.data
+  },
+  (error) => {
+    const responseMessage = error.response && error.response.data && error.response.data.message
+    Message.error(responseMessage || error.message || "{{ messages.request_network_failed }}")
+    return Promise.reject(error)
+  }
+)
+
+export default service

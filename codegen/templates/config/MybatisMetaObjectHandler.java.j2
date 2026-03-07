@@ -1,0 +1,20 @@
+package {{ package }}.config;
+
+import com.baomidou.mybatisplus.core.handlers.MetaObjectHandler;
+{% for item in auto_fill_imports %}import {{ item }};
+{% endfor %}import org.apache.ibatis.reflection.MetaObject;
+import org.springframework.stereotype.Component;
+
+@Component
+public class MybatisMetaObjectHandler implements MetaObjectHandler {
+
+    @Override
+    public void insertFill(MetaObject metaObject) {
+{% for field in insert_fill_fields %}        this.strictInsertFill(metaObject, "{{ field.property_name }}", {{ field.java_type }}.class, {{ field.value_expression }});
+{% endfor %}    }
+
+    @Override
+    public void updateFill(MetaObject metaObject) {
+{% for field in update_fill_fields %}        this.strictUpdateFill(metaObject, "{{ field.property_name }}", {{ field.java_type }}.class, {{ field.value_expression }});
+{% endfor %}    }
+}

@@ -1,0 +1,51 @@
+import request from "@/utils/request"
+
+const baseUrl = "{{ page.api_base }}"
+
+export function {{ page.api_function_names['fetch_page'] }}(params) {
+  return request({
+    url: baseUrl,
+    method: "get",
+    params
+  })
+}
+
+export function {{ page.api_function_names['fetch_one'] }}(id) {
+  return request({
+    url: `${baseUrl}/${id}`,
+    method: "get"
+  })
+}
+
+export function {{ page.api_function_names['create'] }}(data) {
+  return request({
+    url: baseUrl,
+    method: "post",
+    data
+  })
+}
+
+export function {{ page.api_function_names['update'] }}(id, data) {
+  return request({
+    url: `${baseUrl}/${id}`,
+    method: "put",
+    data
+  })
+}
+
+export function {{ page.api_function_names['delete'] }}(id) {
+  return request({
+    url: `${baseUrl}/${id}`,
+    method: "delete"
+  })
+}
+
+{% for relation in page.relation_methods %}export function {{ relation.api_function_name }}(params) {
+  return request({
+    url: `${baseUrl}/relations/{{ relation.endpoint_name }}`,
+    method: "get",
+    params
+  })
+}
+
+{% endfor %}

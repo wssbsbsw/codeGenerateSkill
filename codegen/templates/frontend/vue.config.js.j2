@@ -1,0 +1,12 @@
+module.exports = {
+  lintOnSave: false,
+  devServer: {
+    port: {{ frontend.dev_port }},
+    proxy: {
+      "{{ project.api_prefix }}": {
+        target: "{{ frontend.backend_url }}",
+        changeOrigin: true
+      }
+    }
+  }
+}
