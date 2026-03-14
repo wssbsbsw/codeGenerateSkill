@@ -25,6 +25,8 @@ It is designed for fast scaffolding of admin-style backends and goes beyond simp
 - `POST /import` batch import endpoint (EasyExcel) paired with every `/export` endpoint
 - `POST /auth/change-password` secure password change (verifies old password before encoding new one)
 - Operation log AOP (`@SystemLog` annotation + aspect + `sys_log` table) auto-recording create/update/delete calls
+- `DELETE /batch` batch delete endpoint for every table
+- `GET /dashboard/stats` aggregating totalCount + todayCount across all tables
 - Optional standalone Vue 2 + Element UI admin frontend (with login page, Axios interceptors, and auto-generated form validation)
 
 ## Supported Features
@@ -41,6 +43,8 @@ It is designed for fast scaffolding of admin-style backends and goes beyond simp
 - **Excel Import**: `POST /import` endpoint generated alongside every `/export`, using EasyExcel to batch-insert rows from an uploaded spreadsheet.
 - **Change Password**: `POST /auth/change-password` verifies BCrypt old password and stores the new one encoded.
 - **Operation Log AOP**: `@SystemLog` annotation auto-placed on create/update/delete/import methods. An aspect persists records to `sys_log` (username, URI, IP, timestamp).
+- **Batch Delete**: `DELETE /batch` endpoint accepting a list of IDs for every table.
+- **Dashboard Statistics**: `GET /dashboard/stats` returning `totalCount` and `todayCount` (based on `created_at`) for every business table.
 - **Frontend Generation**: Vue 2 admin with dynamic routing, dictionary lookups, `image-upload` components, and locale switching (`zh-CN` / `en-US`).
 
 ## Install

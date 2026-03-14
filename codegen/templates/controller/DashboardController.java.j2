@@ -1,0 +1,47 @@
+package {{ package }}.controller;
+
+import {{ package }}.common.Result;
+{% for table in tables %}import {{ package }}.mapper.{{ table.mapper_name }};
+{% endfor %}{% if project.enable_swagger %}import io.swagger.annotations.Api;
+import io.swagger.annotations.ApiOperation;
+{% endif %}import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
+
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.LocalTime;
+import java.util.LinkedHashMap;
+import java.util.Map;
+
+/**
+ * Dashboard controller – provides aggregate statistics for all business tables.
+ * Every table gets a "totalCount" and "todayCount" (created_at >= today 00:00).
+ */
+@RestController
+@RequestMapping("{{ project.api_prefix }}/dashboard")
+{% if project.enable_swagger %}@Api(tags = "Dashboard Statistics")
+{% endif %}public class DashboardController {
+
+{% for table in tables %}    private final {{ table.mapper_name }} {{ table.object_name }}Mapper;
+{% endfor %}
+    public DashboardController({% for table in tables %}{{ table.mapper_name }} {{ table.object_name }}Mapper{% if not loop.last %}, {% endif %}{% endfor %}) {
+{% for table in tables %}        this.{{ table.object_name }}Mapper = {{ table.object_name }}Mapper;
+{% endfor %}    }
+
+{% if project.enable_swagger %}    @ApiOperation(value = "Get overall dashboard statistics")
+{% endif %}    @GetMapping("/stats")
+    public Result<Map<String, Object>> stats() {
+        Map<String, Object> data = new LinkedHashMap<>();
+        LocalDateTime todayStart = LocalDateTime.of(LocalDate.now(), LocalTime.MIN);
+
+{% for table in tables %}        Map<String, Object> {{ table.object_name }}Stats = new LinkedHashMap<>();
+        {{ table.object_name }}Stats.put("totalCount", {{ table.object_name }}Mapper.selectCount(null));
+        {{ table.object_name }}Stats.put("todayCount", {{ table.object_name }}Mapper.selectCount(
+                new com.baomidou.mybatisplus.core.conditions.query.QueryWrapper<{{ package }}.entity.{{ table.entity_name }}>()
+                        .ge("created_at", todayStart)));
+        data.put("{{ table.object_name }}", {{ table.object_name }}Stats);
+{% endfor %}
+        return Result.success(data);
+    }
+}

@@ -19,9 +19,13 @@ public interface {{ table.service_name }} {
 
     boolean deleteById({{ table.primary_key_java_type }} id);
 
+    boolean deleteByIds(List<{{ table.primary_key_java_type }}> ids);
+
     PageResult<{{ table.entity_name }}> page({{ table.query_dto_name }} query);
 
     List<{{ table.entity_name }}> list();
+
+    void saveBatch(List<{{ table.entity_name }}> entities);
 {% for relation in relation_methods %}
     PageResult<{{ relation.dto_name }}> {{ relation.method_name }}({{ relation.query_name }} query);
 {% endfor %}

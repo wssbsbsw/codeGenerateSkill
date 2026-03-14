@@ -242,6 +242,16 @@ class CodeRenderer:
                 "security/AuthController.java.j2", **base_context
             )
 
+
+        # Dashboard statistics controller – always generated
+        dashboard_context = {
+            **base_context,
+            "tables": project.tables,
+        }
+        files[f"{java_root}/controller/DashboardController.java"] = self._render(
+            "controller/DashboardController.java.j2", **dashboard_context
+        )
+
         relation_groups = self._group_relations(project.relations)
         table_map = {table.name: table for table in project.tables}
 
