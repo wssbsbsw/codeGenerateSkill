@@ -24,6 +24,8 @@
 - 每张业务表自动生成 `POST /import` Excel 批量导入接口（EasyExcel）
 - `POST /auth/change-password` 密码修改接口（验旧后 BCrypt 加密保存）
 - 操作日志 AOP（`@SystemLog` 注解 + 切面 + `sys_log` 表，create/update/delete/import 自动留痕）
+- 每张业务表自动生成 `DELETE /batch` 批量删除接口
+- `GET /dashboard/stats` 仪表盘统计接口（自动汇总所有表的总数 + 今日新增数）
 - 包含登录页、Axios 拦截器、上传组件、以及智能表单校验的独立 Vue2 + Element UI 管理前端
 
 ## 当前支持的能力
@@ -35,6 +37,8 @@
 - **Excel 批量导入**：每张表自动生成 `POST /import` 接口，使用 EasyExcel 读取上传的表格并批量插入数据库。
 - **密码修改**：`POST /auth/change-password` 接口先用 BCrypt 校验旧密码，再加密保存新密码。
 - **操作日志 AOP**：`@SystemLog` 注解自动加到 create/update/delete/import 方法上，切面将操作者、URI、IP、时间存入 `sys_log` 表，零配置实现操作审计。
+- **批量删除**：每张表自动生成 `DELETE /batch` 接口，接收 ID 列表一次性删除。
+- **仪表盘统计**：`GET /dashboard/stats` 自动聚合所有业务表的 `totalCount` 和 `todayCount`（基于 `created_at`），后台首页数据一键获取。
 - **接口文档**: 根据表和字段注释自动整合 Swagger/Knife4j，自动生成完整的 `@Api`、`@ApiModelProperty` 等注解。
 - **前端表单校验**: 根据字段是否必填以及数据库预设长度，自动在前端 Vue 页面中挂载含有 `:rules` 和 `maxlength` 的校验拦截逻辑。
 - **前端生成**：动态路由、字典翻译、国际化切换 (`zh-CN` / `en-US`) 的全功能后台页面。

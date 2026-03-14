@@ -91,6 +91,19 @@ import java.util.stream.Collectors;
     }
 
 {% if table.auth and table.auth.enabled %}
+    @PreAuthorize("{% if table.auth.roles %}hasAnyRole({{ table.auth.roles_str }}){% endif %}{% if table.auth.roles and table.auth.permissions.delete %} or {% endif %}{% if table.auth.permissions.delete %}hasAuthority('{{ table.auth.permissions.delete }}'){% endif %}")
+{% endif %}
+    @DeleteMapping("/batch")
+{% if project.enable_swagger %}    @ApiOperation(value = "Batch delete {{ table.entity_name }}")
+{% endif %}    @SystemLog("Batch delete {{ table.comment|default(table.entity_name) }}")
+    public Result<Boolean> deleteBatch(@RequestBody List<{{ table.primary_key_java_type }}> ids) {
+        if (ids == null || ids.isEmpty()) {
+            return Result.success(true);
+        }
+        return Result.success({{ table.object_name }}Service.deleteByIds(ids));
+    }
+
+{% if table.auth and table.auth.enabled %}
     @PreAuthorize("{% if table.auth.roles %}hasAnyRole({{ table.auth.roles_str }}){% endif %}{% if table.auth.roles and table.auth.permissions.query %} or {% endif %}{% if table.auth.permissions.query %}hasAuthority('{{ table.auth.permissions.query }}'){% endif %}")
 {% endif %}
     @GetMapping

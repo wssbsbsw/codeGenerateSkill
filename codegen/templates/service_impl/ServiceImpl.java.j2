@@ -120,6 +120,18 @@ public class {{ table.service_impl_name }} implements {{ table.service_name }} {
     public List<{{ table.entity_name }}> list() {
         return {{ table.object_name }}Mapper.selectList(null);
     }
+
+    @Override
+    public boolean deleteByIds(List<{{ table.primary_key_java_type }}> ids) {
+        return {{ table.object_name }}Mapper.deleteBatchIds(ids) > 0;
+    }
+
+    @Override
+    public void saveBatch(List<{{ table.entity_name }}> entities) {
+        for ({{ table.entity_name }} entity : entities) {
+            {{ table.object_name }}Mapper.insert(entity);
+        }
+    }
 {% for relation in relation_methods %}
     @Override
     public PageResult<{{ relation.dto_name }}> {{ relation.method_name }}({{ relation.query_name }} query) {
