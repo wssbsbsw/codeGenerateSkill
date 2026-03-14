@@ -64,10 +64,11 @@
 **行为说明**：
 - 一旦 `enabled: true`，生成的项目 `pom.xml` 自动引入 Security 和 JJWT。
 - 自动生成 `WebSecurityConfig`、`JwtTokenUtil`、`AuthController` 等核心类。
-- 生成三个开箱即用的认证接口：
+- 生成四个开箱即用的认证接口：
   - `POST /api/auth/login` — 验证账密，返回 JWT Token
   - `POST /api/auth/register` — 注册新账号（BCrypt 加密密码，默认授予 `ROLE_USER` 角色）
   - `GET /api/auth/me` — 凭 Token 返回当前用户名 + 角色 + 权限列表（便于前端渲染菜单权限）
+  - `POST /api/auth/change-password` — 先 BCrypt 校验旧密码，再加密存储新密码
 - Parser 会隐式生成 `sys_user`, `sys_role`, `sys_user_role`, `sys_menu_permission`, `sys_role_permission` 这 5 张表的 Entity, Mapper, Service, Controller。
 - 默认在 `init.sql` 里塞入账号 `admin` / 密码 `123456`（经过 BCrypt 加密）的数据。
 
@@ -190,3 +191,27 @@
 
 1. **Excel 导出**：每个普通的 Table 都会生成一个 `XxxExportDto.java` 类（字段自动打上中文的 `@ExcelProperty`），Controller 里自动暴露 `@GetMapping("/export")` 端点，流式输出 Excel 文件。
 2. **单元测试**：生成器会在 `src/test/java/.../controller/` 目录下为所有表生成基于 `@WebMvcTest` + `@MockBean` 的 Spring Boot 集成测试代码，确保项目交付即拥有基础覆盖率。
+
+## 自动生成的通用功能（无需 JSON 配置）
+
+以下功能在每次生成时自动包含，不需要在 JSON 配置中开启：
+
+### Excel 批量导入
+- 每张业务表自动生成 `POST /<resource>/import` 接口。
+- 接受 `MultipartFile`，用 EasyExcel `PageReadListener` 逐页读取，调用 `saveBatch()` 批量插入。
+- 与 `/export` 完全对称，生成的 `ExportDto` 类同时作为导入模板。
+
+### 批量删除
+- 每张业务表自动生成 `DELETE /<resource>/batch` 接口。
+- 接受 `List<ID>` 请求体，调用 MyBatis-Plus `deleteBatchIds()` 一次性删除。
+
+### 操作日志 AOP
+- 自动生成 `@SystemLog("描述")` 注解 + `SystemLogAspect` 切面。
+- 切面通过 `@AfterReturning` 在 Controller 方法成功返回后自动记录：操作人（来自 JWT）、请求 URI、客户端 IP、时间戳。
+- 记录存入 `sys_log` 表（每次生成 `init.sql` 均包含该建表语句）。
+- `create`、`update`、`delete`、`batch delete`、`import` 方法均自动加上 `@SystemLog` 注解。
+
+### 仪表盘统计
+- 自动生成 `DashboardController`，暴露 `GET /api/dashboard/stats` 端点。
+- 返回所有业务表的 `totalCount`（总记录数）和 `todayCount`（今日 `created_at >= 00:00` 的记录数）。
+- 适合后台管理首页的数据概览卡片直接调用。

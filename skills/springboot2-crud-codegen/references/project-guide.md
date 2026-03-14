@@ -2,7 +2,7 @@
 
 ## 仓库定位
 
-`springboot2-crud-codegen` 是一个 Python CLI。它把 JSON 配置转换成企业级可运行的 Spring Boot 2 + MyBatis-Plus CRUD 工程（内置 Spring Security, JJWT, EasyExcel, MockMvc 测试，多租户），并生成带有种子数据的 `init.sql`；启用 `frontend` 后，还能生成包含登录逻辑的独立 Vue2 + Element UI 管理前端。
+`springboot2-crud-codegen` 是一个 Python CLI。它把 JSON 配置转换成企业级可运行的 Spring Boot 2 + MyBatis-Plus CRUD 工程（内置 Spring Security, JJWT, EasyExcel, MockMvc 测试，多租户，操作日志 AOP，批量删除，批量导入，仪表盘统计），并生成带有种子数据的 `init.sql`；启用 `frontend` 后，还能生成包含登录逻辑的独立 Vue2 + Element UI 管理前端。
 
 ## 核心流程
 
@@ -30,6 +30,11 @@
 - `backend/src/main/java/<basePackage>/config/SwaggerConfig.java` (Swagger API 文档配置)
 - `backend/src/main/java/<basePackage>/security/WebSecurityConfig.java` 等
 - `backend/src/main/java/<basePackage>/common/FileController.java` (本地上传接口)
+- `backend/src/main/java/<basePackage>/common/annotation/SystemLog.java` (@SystemLog 操作日志注解)
+- `backend/src/main/java/<basePackage>/common/aspect/SystemLogAspect.java` (操作日志 AOP 切面)
+- `backend/src/main/java/<basePackage>/entity/SysLog.java` (日志实体)
+- `backend/src/main/java/<basePackage>/mapper/SysLogMapper.java` (日志 Mapper)
+- `backend/src/main/java/<basePackage>/controller/DashboardController.java` (仪表盘统计)
 - `backend/src/test/java/<basePackage>/controller/XxxControllerTest.java` (MockMvc 单元测试)
 - `frontend/src/views/login/index.vue`
 - `frontend/src/views/<xxx>/index.vue` (自动嵌入基于 DB 长度构成的 rules，包含必填/字符控制功能)
