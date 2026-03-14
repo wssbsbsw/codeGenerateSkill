@@ -6,14 +6,18 @@ import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableLogic;
 import com.baomidou.mybatisplus.annotation.TableName;
-{% for item in entity_imports %}import {{ item }};
+{% if project.enable_swagger %}import io.swagger.annotations.ApiModel;
+import io.swagger.annotations.ApiModelProperty;
+{% endif %}{% for item in entity_imports %}import {{ item }};
 {% endfor %}import lombok.Data;
 
 @Data
 @TableName("{{ table.name }}")
-public class {{ table.entity_name }} {
+{% if project.enable_swagger and table.comment %}@ApiModel(description = "{{ table.comment|replace('"', '\\"') }}")
+{% endif %}public class {{ table.entity_name }} {
 {% for field in table.fields %}
-{% if field.is_primary %}    @TableId(value = "{{ field.column_name }}"{% if field.id_type %}, type = IdType.{{ field.id_type }}{% endif %})
+{% if project.enable_swagger and field.comment %}    @ApiModelProperty(value = "{{ field.comment|replace('"', '\\"') }}")
+{% endif %}{% if field.is_primary %}    @TableId(value = "{{ field.column_name }}"{% if field.id_type %}, type = IdType.{{ field.id_type }}{% endif %})
 {% else %}{% if field.column_name != field.property_name or field.auto_fill %}    @TableField(value = "{{ field.column_name }}"{% if field.auto_fill %}, fill = FieldFill.{{ field.auto_fill }}{% endif %})
 {% endif %}{% endif %}{% if field.logic_delete %}    @TableLogic
 {% endif %}    private {{ field.java_type }} {{ field.property_name }};

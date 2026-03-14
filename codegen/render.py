@@ -201,6 +201,11 @@ class CodeRenderer:
             "common/FileController.java.j2", **base_context
         )
 
+        if project.enable_swagger:
+            files[f"{java_root}/config/SwaggerConfig.java"] = self._render(
+                "config/SwaggerConfig.java.j2", **base_context
+            )
+
         if project.tenant.enabled:
             files[f"{java_root}/common/TenantContextHolder.java"] = self._render(
                 "common/TenantContextHolder.java.j2", **base_context
@@ -849,6 +854,27 @@ class CodeRenderer:
             has_options=bool(field.frontend.options),
         )
         label = self._frontend_label(field, str(field.property_name), locale)
+        
+        # Build validation rules
+        rules = []
+        messages = self._frontend_messages(locale)
+        if not field.nullable:
+            trigger_event = "change" if widget["kind"] in ["select", "date", "datetime", "boolean"] else "blur"
+            req_msg = messages.get("validation_required", "{} is required").replace("{}", label)
+            rules.append({
+                "required": True,
+                "message": req_msg,
+                "trigger": trigger_event
+            })
+            
+        if widget["max_length"]:
+            len_msg = messages.get("validation_length", "Length cannot exceed {} characters").replace("{}", str(widget["max_length"]))
+            rules.append({
+                "max": widget["max_length"],
+                "message": len_msg,
+                "trigger": "blur"
+            })
+            
         return {
             "property_name": str(field.property_name),
             "label": label,
@@ -859,6 +885,7 @@ class CodeRenderer:
             "value_format": widget["value_format"],
             "max_length": widget["max_length"],
             "required": not bool(field.nullable),
+            "rules": rules,
             "options": [
                 {"label": item.label, "value": item.value}
                 for item in field.frontend.options

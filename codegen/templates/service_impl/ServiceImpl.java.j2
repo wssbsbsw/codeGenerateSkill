@@ -18,6 +18,8 @@ import {{ package }}.dto.{{ relation.query_name }};
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
+import java.util.List;
+
 @Service
 public class {{ table.service_impl_name }} implements {{ table.service_name }} {
 
@@ -112,6 +114,11 @@ public class {{ table.service_impl_name }} implements {{ table.service_name }} {
 
         IPage<{{ table.entity_name }}> result = {{ table.object_name }}Mapper.selectPage(pageData, wrapper);
         return PageResult.of(result);
+    }
+
+    @Override
+    public List<{{ table.entity_name }}> list() {
+        return {{ table.object_name }}Mapper.selectList(null);
     }
 {% for relation in relation_methods %}
     @Override

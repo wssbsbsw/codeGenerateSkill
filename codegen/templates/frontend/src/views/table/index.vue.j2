@@ -101,8 +101,8 @@
     </el-card>
 
     <el-dialog :visible.sync="dialogVisible" :title="dialogTitle" width="720px">
-      <el-form ref="formRef" :model="formData" label-width="120px">
-{% for field in page.form_fields %}        <el-form-item label="{{ field.label }}">
+      <el-form ref="formRef" :model="formData" :rules="formRules" label-width="120px">
+{% for field in page.form_fields %}        <el-form-item label="{{ field.label }}" prop="{{ field.property_name }}">
 {% if field.kind == "text" %}          <el-input v-model="formData.{{ field.property_name }}" maxlength="{{ field.max_length }}" show-word-limit placeholder="{{ field.placeholder }}" />
 {% elif field.kind == "textarea" %}          <el-input v-model="formData.{{ field.property_name }}" type="textarea" :rows="4" maxlength="{{ field.max_length }}" show-word-limit placeholder="{{ field.placeholder }}" />
 {% elif field.kind == "select" %}          <el-select v-model="formData.{{ field.property_name }}" clearable placeholder="{{ field.placeholder }}">
@@ -191,7 +191,10 @@ export default {
 {% if project.security.enabled %}
         "{{ project.security.jwt.header }}": "{{ project.security.jwt.prefix }}" + (localStorage.getItem('{{ project.artifact_id }}_token') || "")
 {% endif %}
-      }
+      },
+      formRules: {
+{% for field in page.form_fields %}{% if field.rules %}        {{ field.property_name }}: {{ field.rules|tojson }},{% endif %}
+{% endfor %}      }
     }
   },
   created() {
@@ -259,6 +262,9 @@ export default {
       this.currentId = null
       this.formData = createEmptyForm()
       this.dialogVisible = true
+      this.$nextTick(() => {
+        this.$refs.formRef?.clearValidate()
+      })
     },
     async openEdit(row) {
       const data = await {{ page.api_function_names['fetch_one'] }}(row.{{ page.primary_key_property }})
@@ -267,6 +273,9 @@ export default {
       this.currentId = row.{{ page.primary_key_property }}
       this.formData = this.normalizeFormData(data)
       this.dialogVisible = true
+      this.$nextTick(() => {
+        this.$refs.formRef?.clearValidate()
+      })
     },
     async openDetail(row) {
       this.detailData = await {{ page.api_function_names['fetch_one'] }}(row.{{ page.primary_key_property }})
@@ -278,6 +287,12 @@ export default {
 {% endfor %}      }
     },
     async submitForm() {
+      try {
+        await this.$refs.formRef.validate()
+      } catch (e) {
+        return
+      }
+
       if (this.dialogMode === "create") {
         await {{ page.api_function_names['create'] }}(this.formData)
         this.$message.success("{{ messages.message_created }}")

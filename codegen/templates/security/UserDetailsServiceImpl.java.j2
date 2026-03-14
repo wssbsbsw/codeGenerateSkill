@@ -78,6 +78,14 @@ public class UserDetailsServiceImpl implements UserDetailsService {
             }
         }
 
-        return new User(sysUser.getUsername(), sysUser.getPassword(), sysUser.getEnabled(), true, true, true, authorities);
+        return new User(
+                sysUser.getUsername(),
+                sysUser.getPassword(),
+                sysUser.getEnabled() != null && sysUser.getEnabled() != 0,
+                true,
+                true,
+                true,
+                authorities
+        );
     }
 }

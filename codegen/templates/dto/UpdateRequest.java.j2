@@ -1,11 +1,15 @@
 package {{ package }}.dto;
 
-{% for item in dto_imports %}import {{ item }};
+{% if project.enable_swagger %}import io.swagger.annotations.ApiModel;
+import io.swagger.annotations.ApiModelProperty;
+{% endif %}{% for item in dto_imports %}import {{ item }};
 {% endfor %}import lombok.Data;
 
 @Data
-public class {{ dto_name }} {
-{% for field in dto_fields %}{% for annotation in field.annotations %}    {{ annotation }}
+{% if project.enable_swagger %}@ApiModel(description = "Update {{ table.entity_name }} Request")
+{% endif %}public class {{ dto_name }} {
+{% for field in dto_fields %}{% if project.enable_swagger and field.comment %}    @ApiModelProperty(value = "{{ field.comment|replace('"', '\\"') }}")
+{% endif %}{% for annotation in field.annotations %}    {{ annotation }}
 {% endfor %}    private {{ field.java_type }} {{ field.property_name }};
 {% endfor %}
 }

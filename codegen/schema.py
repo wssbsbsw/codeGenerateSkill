@@ -502,6 +502,9 @@ SCHEMA_V1: Dict[str, Any] = {
 }
 
 
+_VALIDATOR = Draft202012Validator(SCHEMA_V1)
+
+
 @dataclass(slots=True)
 class ValidationErrorItem:
     path: str
@@ -522,8 +525,7 @@ def _format_path(path_segments: Iterable[Any]) -> str:
 
 
 def validate_schema(payload: Dict[str, Any]) -> List[ValidationErrorItem]:
-    validator = Draft202012Validator(SCHEMA_V1)
-    errors = sorted(validator.iter_errors(payload), key=lambda e: list(e.path))
+    errors = sorted(_VALIDATOR.iter_errors(payload), key=lambda e: list(e.path))
     items: List[ValidationErrorItem] = []
     for error in errors:
         items.append(

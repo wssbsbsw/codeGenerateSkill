@@ -32,6 +32,14 @@
             <artifactId>spring-boot-starter-validation</artifactId>
         </dependency>
 
+{% if project.enable_swagger %}
+        <dependency>
+            <groupId>com.github.xiaoymin</groupId>
+            <artifactId>knife4j-spring-boot-starter</artifactId>
+            <version>3.0.3</version>
+        </dependency>
+{% endif %}
+
 {% if project.security.enabled %}
         <dependency>
             <groupId>org.springframework.boot</groupId>
