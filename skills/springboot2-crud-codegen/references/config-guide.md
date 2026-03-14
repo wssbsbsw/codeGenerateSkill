@@ -89,7 +89,11 @@
 - 如果没有写 `auth.permissions`，Parser 会自动按 `<table_name>:view` 这类规则兜底补全。
 - 生成 Controller 时，会拼接为：`@PreAuthorize("hasAnyRole('ADMIN', 'MANAGER') or hasAuthority('product:add')")`。
 
-## 多租户配置 (Multi-tenancy)
+## 全局功能特性 (Global Features)
+
+除了常规的实体生成，可以在 `global` 下开启额外的拦截器或 API 增强。
+
+### 多租户配置 (Multi-tenancy)
 
 通过 MyBatis-Plus `TenantLineInnerInterceptor` 实现请求级别隔离。
 
@@ -109,6 +113,20 @@
 - 开启后，生成的 `MybatisPlusConfig.java` 注入多租户拦截器。
 - `JwtAuthenticationFilter` 会自动尝试从 HTTP Header 的 `X-Tenant-Id` 或 JWT claims 里读取 tenant ID 存入 `TenantContextHolder` (ThreadLocal)。
 - 之后所有增删改查 SQL MyBatis-Plus 都会自动拼上 `WHERE tenant_id = ?`。
+
+### Swagger/Knife4j 接口文档生成
+
+这部分配置负责自动引入依赖和生成详尽的接口文档注释配置。
+
+```json
+"global": {
+  "enableSwagger": true
+}
+```
+**行为说明**：
+- 当 `enableSwagger: true` 时，生成的后端 `pom.xml` 中将自动注入 `@github.xiaoymin:knife4j-spring-boot-starter` 依赖。
+- 生成一个支持分组的全局 `SwaggerConfig.java` 配置文件。
+- 自动分析所有表(`table.comment`)及字段(`field.comment`)信息，利用 `@Api`、`@ApiOperation`、`@ApiModel`、`@ApiModelProperty` 等注解在生成的 Controller、Entities 以及 DTO 类上提供清晰友好的文档注释。启动后可访问 `/doc.html` 查看。
 
 ## 后端与其他配置
 
@@ -146,6 +164,13 @@
 }
 ```
 渲染层在遇到这两个组件时，不仅会输出 `<el-upload>`，还会自动获取 JWT Token (`localStorage.getItem('token')`) 注入请求头，防止上传接口报 401 错误。
+
+## 智能前端表单校验 (Vue Form Validation)
+
+生成器能够通过提取数据库字段的约束要求，自动在 `<el-form>` 以及 `$data.formRules` 中埋入对应的校验逻辑。这是**开箱即用**的功能。
+
+- **必填校验 (`required`)**：如果某个字段设为 `nullable: false`，则会在 `rules` 里自动生成 `{ required: true, message: "xxx is required", trigger: "..." }`，在前端弹窗点击”保存“时自动拦截空输入。
+- **长度校验 (`max`)**：如果字段类型为 `varchar(50)` (即携带最大长度约束的 `db_type`)，表单验证规则会自动附加上 `{ max: 50, message: "长度不能超过 50 个字符" }`。
 
 ## `relations[]` 完整说明
 

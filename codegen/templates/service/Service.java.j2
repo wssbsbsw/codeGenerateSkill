@@ -8,6 +8,8 @@ import {{ package }}.entity.{{ table.entity_name }};
 {% for relation in relation_methods %}import {{ package }}.dto.{{ relation.dto_name }};
 import {{ package }}.dto.{{ relation.query_name }};
 {% endfor %}
+import java.util.List;
+
 public interface {{ table.service_name }} {
     {{ table.primary_key_java_type }} create({{ table.create_dto_name }} request);
 
@@ -18,6 +20,8 @@ public interface {{ table.service_name }} {
     boolean deleteById({{ table.primary_key_java_type }} id);
 
     PageResult<{{ table.entity_name }}> page({{ table.query_dto_name }} query);
+
+    List<{{ table.entity_name }}> list();
 {% for relation in relation_methods %}
     PageResult<{{ relation.dto_name }}> {{ relation.method_name }}({{ relation.query_name }} query);
 {% endfor %}

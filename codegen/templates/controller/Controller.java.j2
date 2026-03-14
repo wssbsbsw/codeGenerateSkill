@@ -10,7 +10,9 @@ import {{ package }}.entity.{{ table.entity_name }};
 {% for relation in relation_methods %}import {{ package }}.dto.{{ relation.dto_name }};
 import {{ package }}.dto.{{ relation.query_name }};
 {% endfor %}import {{ package }}.service.{{ table.service_name }};
-{% if table.auth and table.auth.enabled %}
+{% if project.enable_swagger %}import io.swagger.annotations.Api;
+import io.swagger.annotations.ApiOperation;
+{% endif %}{% if table.auth and table.auth.enabled %}
 import org.springframework.security.access.prepost.PreAuthorize;
 {% endif %}
 import com.alibaba.excel.EasyExcel;
@@ -34,7 +36,8 @@ import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("{{ project.api_prefix }}/{{ table.resource_name }}")
-public class {{ table.controller_name }} {
+{% if project.enable_swagger %}@Api(tags = "{{ table.comment|default(table.entity_name) }} Management")
+{% endif %}public class {{ table.controller_name }} {
 
     private final {{ table.service_name }} {{ table.object_name }}Service;
 
@@ -46,7 +49,8 @@ public class {{ table.controller_name }} {
     @PreAuthorize("{% if table.auth.roles %}hasAnyRole({{ table.auth.roles_str }}){% endif %}{% if table.auth.roles and table.auth.permissions.create %} or {% endif %}{% if table.auth.permissions.create %}hasAuthority('{{ table.auth.permissions.create }}'){% endif %}")
 {% endif %}
     @PostMapping
-    public Result<{{ table.primary_key_java_type }}> create(@Validated @RequestBody {{ table.create_dto_name }} request) {
+{% if project.enable_swagger %}    @ApiOperation(value = "Create new {{ table.entity_name }}")
+{% endif %}    public Result<{{ table.primary_key_java_type }}> create(@Validated @RequestBody {{ table.create_dto_name }} request) {
         return Result.success({{ table.object_name }}Service.create(request));
     }
 
@@ -54,7 +58,8 @@ public class {{ table.controller_name }} {
     @PreAuthorize("{% if table.auth.roles %}hasAnyRole({{ table.auth.roles_str }}){% endif %}{% if table.auth.roles and table.auth.permissions.query %} or {% endif %}{% if table.auth.permissions.query %}hasAuthority('{{ table.auth.permissions.query }}'){% endif %}")
 {% endif %}
     @GetMapping("/{id}")
-    public Result<{{ table.entity_name }}> getById(@PathVariable("id") {{ table.primary_key_java_type }} id) {
+{% if project.enable_swagger %}    @ApiOperation(value = "Get {{ table.entity_name }} by ID")
+{% endif %}    public Result<{{ table.entity_name }}> getById(@PathVariable("id") {{ table.primary_key_java_type }} id) {
         return Result.success({{ table.object_name }}Service.getById(id));
     }
 
@@ -62,7 +67,8 @@ public class {{ table.controller_name }} {
     @PreAuthorize("{% if table.auth.roles %}hasAnyRole({{ table.auth.roles_str }}){% endif %}{% if table.auth.roles and table.auth.permissions.update %} or {% endif %}{% if table.auth.permissions.update %}hasAuthority('{{ table.auth.permissions.update }}'){% endif %}")
 {% endif %}
     @PutMapping("/{id}")
-    public Result<Boolean> update(
+{% if project.enable_swagger %}    @ApiOperation(value = "Update {{ table.entity_name }}")
+{% endif %}    public Result<Boolean> update(
             @PathVariable("id") {{ table.primary_key_java_type }} id,
             @Validated @RequestBody {{ table.update_dto_name }} request
     ) {
@@ -73,7 +79,8 @@ public class {{ table.controller_name }} {
     @PreAuthorize("{% if table.auth.roles %}hasAnyRole({{ table.auth.roles_str }}){% endif %}{% if table.auth.roles and table.auth.permissions.delete %} or {% endif %}{% if table.auth.permissions.delete %}hasAuthority('{{ table.auth.permissions.delete }}'){% endif %}")
 {% endif %}
     @DeleteMapping("/{id}")
-    public Result<Boolean> delete(@PathVariable("id") {{ table.primary_key_java_type }} id) {
+{% if project.enable_swagger %}    @ApiOperation(value = "Delete {{ table.entity_name }} by ID")
+{% endif %}    public Result<Boolean> delete(@PathVariable("id") {{ table.primary_key_java_type }} id) {
         return Result.success({{ table.object_name }}Service.deleteById(id));
     }
 
@@ -81,7 +88,8 @@ public class {{ table.controller_name }} {
     @PreAuthorize("{% if table.auth.roles %}hasAnyRole({{ table.auth.roles_str }}){% endif %}{% if table.auth.roles and table.auth.permissions.query %} or {% endif %}{% if table.auth.permissions.query %}hasAuthority('{{ table.auth.permissions.query }}'){% endif %}")
 {% endif %}
     @GetMapping
-    public Result<PageResult<{{ table.entity_name }}>> page(@Validated @ModelAttribute {{ table.query_dto_name }} query) {
+{% if project.enable_swagger %}    @ApiOperation(value = "Page query {{ table.entity_name }}")
+{% endif %}    public Result<PageResult<{{ table.entity_name }}>> page(@Validated @ModelAttribute {{ table.query_dto_name }} query) {
         return Result.success({{ table.object_name }}Service.page(query));
     }
 
@@ -89,7 +97,8 @@ public class {{ table.controller_name }} {
     @PreAuthorize("{% if table.auth.roles %}hasAnyRole({{ table.auth.roles_str }}){% endif %}{% if table.auth.roles and table.auth.permissions.query %} or {% endif %}{% if table.auth.permissions.query %}hasAuthority('{{ table.auth.permissions.query }}'){% endif %}")
 {% endif %}
     @GetMapping("/export")
-    public void export(HttpServletResponse response) throws IOException {
+{% if project.enable_swagger %}    @ApiOperation(value = "Export {{ table.entity_name }} to Excel")
+{% endif %}    public void export(HttpServletResponse response) throws IOException {
         response.setContentType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
         response.setCharacterEncoding("utf-8");
         String fileName = URLEncoder.encode("{{ table.entity_name }}Export", "UTF-8").replaceAll("\\+", "%20");
@@ -112,7 +121,8 @@ public class {{ table.controller_name }} {
     @PreAuthorize("{% if relation.auth.roles %}hasAnyRole({{ relation.auth.roles_str }}){% endif %}{% if relation.auth.roles and relation.auth.permissions.query %} or {% endif %}{% if relation.auth.permissions.query %}hasAuthority('{{ relation.auth.permissions.query }}'){% endif %}")
 {% endif %}
     @GetMapping("/relations/{{ relation.endpoint_name }}")
-    public Result<PageResult<{{ relation.dto_name }}>> {{ relation.method_name }}(@Validated @ModelAttribute {{ relation.query_name }} query) {
+{% if project.enable_swagger %}    @ApiOperation(value = "Query relation {{ relation.endpoint_name }}")
+{% endif %}    public Result<PageResult<{{ relation.dto_name }}>> {{ relation.method_name }}(@Validated @ModelAttribute {{ relation.query_name }} query) {
         return Result.success({{ table.object_name }}Service.{{ relation.method_name }}(query));
     }
 {% endfor %}

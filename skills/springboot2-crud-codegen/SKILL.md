@@ -1,6 +1,6 @@
 ---
 name: springboot2-crud-codegen
-description: Work with the `springboot2-crud-codegen` repository to understand docs, edit JSON configs, generate enterprise Spring Boot 2 + MyBatis-Plus CRUD backends (with RBAC, multi-tenancy, Excel export, file upload, unit tests) and `init.sql`, optionally generate Vue 2 admin frontends, diagnose schema/parser/render issues, or extend this generator. Use when users ask in English or Chinese to understand this repo, modify `examples/*.json`, run `codegen`, inspect generated Java/Maven/Vue output, or fix/extend parser, templates, and rendering behavior.
+description: Work with the `springboot2-crud-codegen` repository to understand docs, edit JSON configs, generate enterprise Spring Boot 2 + MyBatis-Plus CRUD backends (with RBAC, multi-tenancy, Swagger/Knife4j, Excel export, file upload, unit tests) and `init.sql`, optionally generate Vue 2 admin frontends (with auto form validation), diagnose schema/parser/render issues, or extend this generator. Use when users ask in English or Chinese to understand this repo, modify `examples/*.json`, run `codegen`, inspect generated Java/Maven/Vue output, or fix/extend parser, templates, and rendering behavior.
 ---
 
 # springboot2-crud-codegen
@@ -9,7 +9,7 @@ description: Work with the `springboot2-crud-codegen` repository to understand d
 
 - 先区分任务类型：编写配置、排查配置报错、生成项目、检查生成结果、修改生成器实现。
 - 先读 `references/project-guide.md` 了解仓库结构、命令和边界。
-- 编辑 JSON 配置前，读 `references/config-guide.md`；里面已经包含规则说明（含最新的 Security, Tenant, Export, Upload 功能）和不同场景示例。
+- 编辑 JSON 配置前，读 `references/config-guide.md`；里面已经包含规则说明（含最新的 Security, Tenant, Export, Upload, Swagger, Form Validation 功能）和不同场景示例。
 - 始终遵守主流程：`load -> validate -> parse -> render -> write`。
 - 始终记住项目边界：仅 Java 8、仅 Spring Boot 2.x、SQL 偏 MySQL、前端仅 Vue2 + Element UI。
 
@@ -41,7 +41,7 @@ description: Work with the `springboot2-crud-codegen` repository to understand d
 - 语法检查：`python -m compileall codegen tests`
 - 单元测试：`python -m unittest discover -s tests -v`
 - 只测一个方法时，用 `-k` 子串匹配；不要用 pytest node id，也不要用 `python -m unittest -v`。
-- 需要人工验收时，至少检查 `backend/pom.xml`（Security, EasyExcel）、`backend/src/main/java/.../security`（权限类）、`backend/src/test`（单元测试）、`backend/src/main/resources/init.sql` 与核心 Java/Mapper 文件。
+- 需要人工验收时，至少检查 `backend/pom.xml`（Security, EasyExcel, knife4j）、`backend/src/main/java/.../security`（权限类）、`backend/src/test`（单元测试）、`backend/src/main/resources/init.sql` 与核心 Java/Mapper/Vue(带有 rules 的 el-form) 文件。
 
 ### 5. 修改生成器实现
 
@@ -60,4 +60,4 @@ description: Work with the `springboot2-crud-codegen` repository to understand d
 ## 读取参考资料
 
 - 仓库结构、命令、限制：读 `references/project-guide.md`
-- 配置规则、校验点、安全/多租户/上传组件说明：读 `references/config-guide.md`
+- 配置规则、校验点、安全/多租户/上传组件/文档/校验说明：读 `references/config-guide.md`

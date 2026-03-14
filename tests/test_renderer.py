@@ -186,6 +186,50 @@ class RendererTest(unittest.TestCase):
             "ex.getMessage()", exception_handler.split("handleException")[1]
         )
 
+    def test_render_common_result_and_service_support_export_and_upload(self) -> None:
+        payload = json.loads(json.dumps(self.sample_payload))
+        payload["frontend"] = {
+            "enabled": True,
+            "framework": "vue2",
+            "locale": "zh-CN",
+        }
+        project = parse_config(payload)
+        files = CodeRenderer().render_project(project)
+
+        result_java = files[
+            "backend/src/main/java/com/example/demo/common/Result.java"
+        ]
+        service_java = files[
+            "backend/src/main/java/com/example/demo/service/UserService.java"
+        ]
+        service_impl_java = files[
+            "backend/src/main/java/com/example/demo/service/impl/UserServiceImpl.java"
+        ]
+        file_controller_java = files[
+            "backend/src/main/java/com/example/demo/common/FileController.java"
+        ]
+
+        self.assertIn("public static <T> Result<T> error(int code, String message)", result_java)
+        self.assertIn("List<User> list();", service_java)
+        self.assertIn("public List<User> list()", service_impl_java)
+        self.assertIn("return userMapper.selectList(null);", service_impl_java)
+        self.assertIn("return Result.error(400, \"File is empty\");", file_controller_java)
+
+    def test_render_security_user_details_handles_integer_enabled_flag(self) -> None:
+        root = Path(__file__).resolve().parents[1]
+        payload = json.loads(
+            (root / "examples" / "sample_security.json").read_text(encoding="utf-8")
+        )
+
+        project = parse_config(payload)
+        files = CodeRenderer().render_project(project)
+
+        user_details = files[
+            "backend/src/main/java/com/example/admin/security/UserDetailsServiceImpl.java"
+        ]
+
+        self.assertIn("sysUser.getEnabled() != null && sysUser.getEnabled() != 0", user_details)
+
     def test_render_vue2_frontend_project(self) -> None:
         payload = json.loads(json.dumps(self.sample_payload))
         payload["frontend"] = {
@@ -254,7 +298,7 @@ class RendererTest(unittest.TestCase):
         self.assertIn("el-table", users_view)
         self.assertIn("sortBy", users_view)
         self.assertIn("el-dialog", users_view)
-        self.assertNotIn('prop="username"', users_view)
+        self.assertIn('prop="username"', users_view)
         self.assertIn("Login Name", users_view)
         self.assertIn("Type username", users_view)
         self.assertIn('label="Enabled"', users_view)

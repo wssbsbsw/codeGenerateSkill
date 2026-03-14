@@ -2,6 +2,11 @@ from __future__ import annotations
 
 import re
 from typing import Dict
+from functools import lru_cache
+
+_DB_TYPE_LENGTH_CLEAN_RE = re.compile(r"\(.*\)")
+_DB_TYPE_LENGTH_RE = re.compile(r"\((\d+)(?:\s*,\s*\d+)?\)")
+_WORD_SPLIT_RE = re.compile(r"[_\-\s]+")
 
 DB_TO_JAVA: Dict[str, str] = {
     "bigint": "Long",
@@ -33,31 +38,36 @@ JAVA_IMPORTS: Dict[str, str] = {
 }
 
 
+@lru_cache(maxsize=1024)
 def normalize_db_type(db_type: str) -> str:
     normalized = db_type.strip().lower()
-    normalized = re.sub(r"\(.*\)", "", normalized)
+    normalized = _DB_TYPE_LENGTH_CLEAN_RE.sub("", normalized)
     normalized = normalized.split()[0]
     return normalized
 
 
+@lru_cache(maxsize=1024)
 def db_to_java(db_type: str) -> str:
     normalized = normalize_db_type(db_type)
     return DB_TO_JAVA.get(normalized, "String")
 
 
+@lru_cache(maxsize=1024)
 def db_type_length(db_type: str) -> int | None:
-    match = re.search(r"\((\d+)(?:\s*,\s*\d+)?\)", db_type.strip())
+    match = _DB_TYPE_LENGTH_RE.search(db_type.strip())
     if not match:
         return None
     return int(match.group(1))
 
 
+@lru_cache(maxsize=1024)
 def java_import(java_type: str) -> str | None:
     return JAVA_IMPORTS.get(java_type)
 
 
+@lru_cache(maxsize=1024)
 def snake_to_camel(text: str) -> str:
-    parts = [part for part in re.split(r"[_\-\s]+", text.strip()) if part]
+    parts = [part for part in _WORD_SPLIT_RE.split(text.strip()) if part]
     if not parts:
         return text
     if len(parts) == 1:
@@ -68,6 +78,7 @@ def snake_to_camel(text: str) -> str:
     return f"{head}{tail}"
 
 
+@lru_cache(maxsize=1024)
 def snake_to_pascal(text: str) -> str:
-    parts = re.split(r"[_\-\s]+", text.strip())
+    parts = _WORD_SPLIT_RE.split(text.strip())
     return "".join(part.capitalize() for part in parts if part)

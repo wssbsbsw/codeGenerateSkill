@@ -19,7 +19,8 @@
 - 统一返回结构 `Result<T>` 和 `PageResult<T>`
 - 本地文件上传接口 (`FileController`) 及静态资源映射
 - 包含内置 RBAC 系统表（`sys_user` 等）、外键、索引及种子数据的 `init.sql`
-- 包含登录页、Axios 拦截器、上传组件的独立 Vue2 + Element UI 管理前端
+- 开箱即用的 Swagger/Knife4j API 接口文档
+- 包含登录页、Axios 拦截器、上传组件、以及智能表单校验的独立 Vue2 + Element UI 管理前端
 
 ## 当前支持的能力
 
@@ -30,6 +31,8 @@
 - **文件上传**：原生支持 MultipartFile 上传落盘，前端自动挂载带鉴权头的 `<el-upload>` 组件 (`image-upload` / `file-upload`)。
 - **自动化测试**：生成对 Controller 的集成测试，自动 Mock 底层 Service。
 - **排序过滤**：安全的白名单单表与联表排序。
+- **接口文档**: 根据表和字段注释自动整合 Swagger/Knife4j，自动生成完整的 `@Api`、`@ApiModelProperty` 等注解。
+- **前端表单校验**: 根据字段是否必填以及数据库预设长度，自动在前端 Vue 页面中挂载含有 `:rules` 和 `maxlength` 的校验拦截逻辑。
 - **前端生成**：动态路由、字典翻译、国际化切换 (`zh-CN` / `en-US`) 的全功能后台页面。
 
 ## 安装
@@ -115,6 +118,17 @@ python -m codegen -c examples/sample_security.json -o /tmp/codegen-out
   }
 }
 ```
+
+### 接口文档 (`global.enableSwagger`)
+
+在 `global` 节点下开启即可生成开箱即用的带有所有注释的 API 文档：
+
+```json
+"global": {
+  "enableSwagger": true
+}
+```
+开启后后端的项目 `pom.xml` 中将自动注入 `@github.xiaoymin:knife4j-spring-boot-starter` 依赖，并附带针对所有 DTO 类以及控制器的各种注解说明。
 
 ### 文件上传 (`backend.uploadDir`)
 

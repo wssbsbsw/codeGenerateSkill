@@ -24,13 +24,15 @@
 
 常见输出文件：
 
-- `backend/pom.xml`（包含 spring-boot-starter-security, jjwt, easyexcel 等）
+- `backend/pom.xml`（包含 spring-boot-starter-security, jjwt, easyexcel, knife4j 等）
 - `backend/src/main/resources/application.yml`
 - `backend/src/main/resources/init.sql`（包含生成的业务表与 RBAC 五张系统表）
+- `backend/src/main/java/<basePackage>/config/SwaggerConfig.java` (Swagger API 文档配置)
 - `backend/src/main/java/<basePackage>/security/WebSecurityConfig.java` 等
 - `backend/src/main/java/<basePackage>/common/FileController.java` (本地上传接口)
 - `backend/src/test/java/<basePackage>/controller/XxxControllerTest.java` (MockMvc 单元测试)
 - `frontend/src/views/login/index.vue`
+- `frontend/src/views/<xxx>/index.vue` (自动嵌入基于 DB 长度构成的 rules，包含必填/字符控制功能)
 - `frontend/src/utils/request.js` (含 Token 注入与 401 拦截)
 
 ## 关键命令
