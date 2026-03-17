@@ -1,0 +1,67 @@
+{
+  "project": {
+    "groupId": "com.example",
+    "artifactId": "preset-backend-frontend",
+    "name": "preset-backend-frontend",
+    "basePackage": "com.example.fullstack",
+    "bootVersion": "2.7.18",
+    "javaVersion": 8
+  },
+  "datasource": {
+    "url": "jdbc:mysql://127.0.0.1:3306/preset_backend_frontend?useSSL=false&serverTimezone=UTC",
+    "databaseName": "preset_backend_frontend",
+    "username": "root",
+    "password": "root",
+    "driverClassName": "com.mysql.cj.jdbc.Driver"
+  },
+  "frontend": {
+    "enabled": true,
+    "framework": "vue2",
+    "locale": "zh-CN",
+    "outputDir": "frontend",
+    "appTitle": "业务后台",
+    "backendUrl": "http://127.0.0.1:8080",
+    "devPort": 8081
+  },
+  "dictionaries": [
+    {
+      "key": "user_status",
+      "name": "用户状态",
+      "valueType": "integer",
+      "items": [
+        {"label": "禁用", "value": 0, "sort": 10, "enabled": true},
+        {"label": "启用", "value": 1, "sort": 20, "enabled": true}
+      ]
+    }
+  ],
+  "tables": [
+    {
+      "name": "users",
+      "comment": "用户",
+      "entityName": "User",
+      "primaryKey": "id",
+      "queryableFields": [
+        {"name": "username", "operator": "LIKE"},
+        {"name": "status", "operator": "EQ"}
+      ],
+      "sortableFields": ["id", "username", "created_at"],
+      "frontend": {
+        "menuTitle": "用户管理",
+        "menuIcon": "el-icon-user"
+      },
+      "fields": [
+        {"name": "id", "type": "bigint", "nullable": false, "idType": "AUTO", "comment": "主键"},
+        {"name": "username", "type": "varchar(64)", "nullable": false, "comment": "用户名"},
+        {"name": "status", "type": "int", "nullable": false, "comment": "状态", "dictKey": "user_status"},
+        {"name": "created_at", "type": "datetime", "nullable": false, "autoFill": "INSERT", "comment": "创建时间"}
+      ]
+    }
+  ],
+  "relations": [],
+  "global": {
+    "apiPrefix": "/api",
+    "author": "codegen",
+    "dateTimeFormat": "yyyy-MM-dd HH:mm:ss",
+    "enableSwagger": true
+  }
+}

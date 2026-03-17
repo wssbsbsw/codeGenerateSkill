@@ -1,0 +1,91 @@
+{
+  "project": {
+    "groupId": "com.example",
+    "artifactId": "preset-saas-multi-tenant",
+    "name": "preset-saas-multi-tenant",
+    "basePackage": "com.example.saas",
+    "bootVersion": "2.7.18",
+    "javaVersion": 8
+  },
+  "datasource": {
+    "url": "jdbc:mysql://127.0.0.1:3306/preset_saas_multi_tenant?useSSL=false&serverTimezone=UTC",
+    "databaseName": "preset_saas_multi_tenant",
+    "username": "root",
+    "password": "root",
+    "driverClassName": "com.mysql.cj.jdbc.Driver"
+  },
+  "security": {
+    "enabled": true,
+    "jwt": {
+      "secret": "my-super-secret-key-that-is-very-long-and-secure"
+    },
+    "rbac": {
+      "superAdminRole": "ADMIN"
+    }
+  },
+  "frontend": {
+    "enabled": true,
+    "framework": "vue2",
+    "locale": "en-US",
+    "outputDir": "frontend",
+    "appTitle": "SaaS Admin",
+    "backendUrl": "http://127.0.0.1:8080",
+    "devPort": 8081
+  },
+  "dictionaries": [
+    {
+      "key": "project_status",
+      "name": "Project Status",
+      "valueType": "integer",
+      "items": [
+        {"label": "Draft", "value": 0, "sort": 10, "enabled": true},
+        {"label": "Active", "value": 1, "sort": 20, "enabled": true},
+        {"label": "Archived", "value": 2, "sort": 30, "enabled": true}
+      ]
+    }
+  ],
+  "tables": [
+    {
+      "name": "projects",
+      "comment": "Projects",
+      "entityName": "Project",
+      "primaryKey": "id",
+      "queryableFields": [
+        {"name": "project_name", "operator": "LIKE"},
+        {"name": "status", "operator": "EQ"}
+      ],
+      "sortableFields": ["id", "project_name", "created_at"],
+      "auth": {
+        "roles": ["ADMIN", "TENANT_ADMIN"],
+        "permissions": {
+          "query": "project:view",
+          "create": "project:add",
+          "update": "project:edit",
+          "delete": "project:delete"
+        }
+      },
+      "frontend": {
+        "menuTitle": "Projects",
+        "menuIcon": "el-icon-office-building"
+      },
+      "fields": [
+        {"name": "id", "type": "bigint", "nullable": false, "idType": "AUTO", "comment": "ID"},
+        {"name": "tenant_id", "type": "bigint", "nullable": false, "comment": "Tenant ID"},
+        {"name": "project_name", "type": "varchar(128)", "nullable": false, "comment": "Project Name"},
+        {"name": "status", "type": "int", "nullable": false, "comment": "Project Status", "dictKey": "project_status"},
+        {"name": "created_at", "type": "datetime", "nullable": false, "autoFill": "INSERT", "comment": "Created Time"}
+      ]
+    }
+  ],
+  "relations": [],
+  "global": {
+    "apiPrefix": "/api",
+    "author": "codegen",
+    "dateTimeFormat": "yyyy-MM-dd HH:mm:ss",
+    "enableSwagger": true,
+    "tenant": {
+      "enabled": true,
+      "column": "tenant_id"
+    }
+  }
+}

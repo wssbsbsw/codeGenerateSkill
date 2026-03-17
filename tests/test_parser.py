@@ -196,6 +196,115 @@ class ParserTest(unittest.TestCase):
         )
         self.assertGreater(len(sys_role_permission_table.seed_data), 0)
 
+    def test_parse_dictionaries_and_bind_dict_fields(self) -> None:
+        payload = json.loads(json.dumps(self.sample_payload))
+        payload["dictionaries"] = [
+            {
+                "key": "user_status",
+                "name": "User Status",
+                "valueType": "integer",
+                "items": [
+                    {"label": "Disabled", "value": 0, "sort": 10, "enabled": True},
+                    {"label": "Enabled", "value": 1, "sort": 20, "enabled": True},
+                ],
+            }
+        ]
+        payload["tables"][0]["fields"][2]["dictKey"] = "user_status"
+
+        project = parse_config(payload)
+
+        self.assertEqual(project.dictionaries[0].key, "user_status")
+        users_table = next(item for item in project.tables if item.name == "users")
+        status_field = next(
+            field for field in users_table.fields if field.property_name == "status"
+        )
+        self.assertEqual(status_field.dict_key, "user_status")
+
+        dict_type_table = next(
+            item for item in project.tables if item.name == "sys_dict_type"
+        )
+        self.assertIn("user_status", [row["dict_key"] for row in dict_type_table.seed_data])
+
+        dict_item_table = next(
+            item for item in project.tables if item.name == "sys_dict_item"
+        )
+        self.assertIn("Enabled", [row["item_label"] for row in dict_item_table.seed_data])
+
+    def test_invalid_dictionary_configs_should_fail(self) -> None:
+        cases = []
+
+        unknown_dict = json.loads(json.dumps(self.sample_payload))
+        unknown_dict["dictionaries"] = []
+        unknown_dict["tables"][0]["fields"][2]["dictKey"] = "missing_status"
+        cases.append(("unknown dictKey", unknown_dict))
+
+        incompatible_type = json.loads(json.dumps(self.sample_payload))
+        incompatible_type["dictionaries"] = [
+            {
+                "key": "user_status",
+                "name": "User Status",
+                "valueType": "boolean",
+                "items": [
+                    {"label": "Disabled", "value": False},
+                    {"label": "Enabled", "value": True},
+                ],
+            }
+        ]
+        incompatible_type["tables"][0]["fields"][2]["dictKey"] = "user_status"
+        cases.append(("incompatible field type", incompatible_type))
+
+        duplicate_key = json.loads(json.dumps(self.sample_payload))
+        duplicate_key["dictionaries"] = [
+            {
+                "key": "user_status",
+                "name": "User Status",
+                "valueType": "integer",
+                "items": [{"label": "Disabled", "value": 0}],
+            },
+            {
+                "key": "user_status",
+                "name": "Order Status",
+                "valueType": "integer",
+                "items": [{"label": "Paid", "value": 1}],
+            },
+        ]
+        cases.append(("duplicate dictionary key", duplicate_key))
+
+        duplicate_item_value = json.loads(json.dumps(self.sample_payload))
+        duplicate_item_value["dictionaries"] = [
+            {
+                "key": "user_status",
+                "name": "User Status",
+                "valueType": "integer",
+                "items": [
+                    {"label": "Disabled", "value": 0},
+                    {"label": "Disabled Copy", "value": 0},
+                ],
+            }
+        ]
+        cases.append(("duplicate dictionary value", duplicate_item_value))
+
+        dict_with_options = json.loads(json.dumps(self.sample_payload))
+        dict_with_options["dictionaries"] = [
+            {
+                "key": "user_status",
+                "name": "User Status",
+                "valueType": "integer",
+                "items": [{"label": "Disabled", "value": 0}],
+            }
+        ]
+        dict_with_options["tables"][0]["fields"][2]["dictKey"] = "user_status"
+        dict_with_options["tables"][0]["fields"][2]["frontend"] = {
+            "component": "select",
+            "options": [{"label": "Disabled", "value": 0}],
+        }
+        cases.append(("dictKey with frontend options", dict_with_options))
+
+        for name, payload in cases:
+            with self.subTest(name=name):
+                with self.assertRaises(ConfigError):
+                    parse_config(payload)
+
 
 if __name__ == "__main__":
     unittest.main()

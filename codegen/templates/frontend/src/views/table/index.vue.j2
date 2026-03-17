@@ -22,8 +22,9 @@
             placeholder="{{ field.placeholder }}"
           />
 {% elif field.kind == "select" %}          <el-select v-model="queryForm.{{ field.property_name }}" clearable placeholder="{{ field.placeholder }}">
-{% for option in field.options %}            <el-option :value="{{ option.value|tojson }}" label="{{ option.label }}" />
-{% endfor %}          </el-select>
+{% if field.dict_key %}{% raw %}            <el-option v-for="option in dictionaryOptions['{% endraw %}{{ field.dict_key }}{% raw %}'] || []" :key="String(option.value)" :value="option.value" :label="option.label" />
+{% endraw %}{% else %}{% for option in field.options %}            <el-option :value="{{ option.value|tojson }}" label="{{ option.label }}" />
+{% endfor %}{% endif %}          </el-select>
 {% elif field.kind == "number" %}          <el-input-number
             v-model="queryForm.{{ field.property_name }}"
             :step="{{ field.step }}"
@@ -71,7 +72,8 @@
 {% if column.sortable %}          sortable="custom"
 {% endif %}        >
           <template slot-scope="scope">
-{% if column.formatter == "datetime" %}            <span v-text="formatDateTime(scope.row.{{ column.property_name }})"></span>
+{% if column.dict_key %}            <span v-text="dictionaryLabel('{{ column.dict_key }}', scope.row.{{ column.property_name }})"></span>
+{% elif column.formatter == "datetime" %}            <span v-text="formatDateTime(scope.row.{{ column.property_name }})"></span>
 {% elif column.formatter == "date" %}            <span v-text="formatDate(scope.row.{{ column.property_name }})"></span>
 {% elif column.formatter == "boolean" %}            <span v-text="formatBoolean(scope.row.{{ column.property_name }})"></span>
 {% else %}            <span v-text="formatValue(scope.row.{{ column.property_name }})"></span>
@@ -106,8 +108,9 @@
 {% if field.kind == "text" %}          <el-input v-model="formData.{{ field.property_name }}" maxlength="{{ field.max_length }}" show-word-limit placeholder="{{ field.placeholder }}" />
 {% elif field.kind == "textarea" %}          <el-input v-model="formData.{{ field.property_name }}" type="textarea" :rows="4" maxlength="{{ field.max_length }}" show-word-limit placeholder="{{ field.placeholder }}" />
 {% elif field.kind == "select" %}          <el-select v-model="formData.{{ field.property_name }}" clearable placeholder="{{ field.placeholder }}">
-{% for option in field.options %}            <el-option :value="{{ option.value|tojson }}" label="{{ option.label }}" />
-{% endfor %}          </el-select>
+{% if field.dict_key %}{% raw %}            <el-option v-for="option in dictionaryOptions['{% endraw %}{{ field.dict_key }}{% raw %}'] || []" :key="String(option.value)" :value="option.value" :label="option.label" />
+{% endraw %}{% else %}{% for option in field.options %}            <el-option :value="{{ option.value|tojson }}" label="{{ option.label }}" />
+{% endfor %}{% endif %}          </el-select>
 {% elif field.kind == "number" %}          <el-input-number v-model="formData.{{ field.property_name }}" :step="{{ field.step }}" :controls-position="right" />
 {% elif field.kind in ["date", "datetime"] %}          <el-date-picker v-model="formData.{{ field.property_name }}" type="{{ field.picker_type }}" value-format="{{ field.value_format }}" placeholder="{{ field.placeholder }}" />
 {% elif field.kind == "switch" %}          <el-switch v-model="formData.{{ field.property_name }}" />
@@ -135,7 +138,8 @@
     <el-drawer :visible.sync="detailVisible" title="{{ messages.dialog_detail_title }}" size="40%">
       <el-descriptions :column="1" border>
 {% for field in page.detail_fields %}        <el-descriptions-item label="{{ field.label }}">
-{% if field.formatter == "datetime" %}          <span class="detail-value" v-text="formatDateTime(detailData.{{ field.property_name }})"></span>
+{% if field.dict_key %}          <span class="detail-value" v-text="dictionaryLabel('{{ field.dict_key }}', detailData.{{ field.property_name }})"></span>
+{% elif field.formatter == "datetime" %}          <span class="detail-value" v-text="formatDateTime(detailData.{{ field.property_name }})"></span>
 {% elif field.formatter == "date" %}          <span class="detail-value" v-text="formatDate(detailData.{{ field.property_name }})"></span>
 {% elif field.formatter == "boolean" %}          <span class="detail-value" v-text="formatBoolean(detailData.{{ field.property_name }})"></span>
 {% else %}          <span class="detail-value" v-text="formatValue(detailData.{{ field.property_name }})"></span>
@@ -154,6 +158,8 @@ import {
   {{ page.api_function_names['delete'] }}
 } from "@/api/{{ page.resource_name }}"
 import { formatBoolean, formatDate, formatDateTime, formatValue } from "@/utils/format"
+{% if page.has_dictionaries %}import { loadDictionaryOptions, formatDictionaryValue } from "@/utils/dictionary"
+{% endif %}
 
 const createEmptyForm = () => ({
 {% for field in page.form_fields %}  {{ field.property_name }}: {{ field.default_js }}{% if not loop.last %},{% endif %}
@@ -186,6 +192,9 @@ export default {
       formData: createEmptyForm(),
       detailVisible: false,
       detailData: {},
+{% if page.has_dictionaries %}
+      dictionaryOptions: {},
+{% endif %}
       uploadUrl: (process.env.VUE_APP_BASE_API || "{{ project.api_prefix }}") + "/common/upload",
       uploadHeaders: {
 {% if project.security.enabled %}
@@ -198,13 +207,32 @@ export default {
     }
   },
   created() {
-    this.loadData()
+{% if page.has_dictionaries %}    this.initPage()
+{% else %}    this.loadData()
+{% endif %}
   },
   methods: {
     formatBoolean,
     formatDate,
     formatDateTime,
     formatValue,
+{% if page.has_dictionaries %}
+    async initPage() {
+      await this.loadDictionaries()
+      this.loadData()
+    },
+    async loadDictionaries() {
+      const dictKeys = [{% for key in page.dictionary_keys %}"{{ key }}"{% if not loop.last %}, {% endif %}{% endfor %}]
+      const entries = await Promise.all(dictKeys.map(async key => [key, await loadDictionaryOptions(key)]))
+      this.dictionaryOptions = entries.reduce((acc, entry) => {
+        acc[entry[0]] = entry[1]
+        return acc
+      }, {})
+    },
+    dictionaryLabel(dictKey, value) {
+      return formatDictionaryValue(this.dictionaryOptions[dictKey] || [], value)
+    },
+{% endif %}
     handleUploadSuccess(res, fieldName) {
       if (res.code === 0) {
         this.formData[fieldName] = res.data;

@@ -8,6 +8,8 @@ from typing import Any, Dict, List
 
 from .ir import (
     BackendIR,
+    DictionaryIR,
+    DictionaryItemIR,
     FieldIR,
     FieldFrontendIR,
     FrontendIR,
@@ -50,6 +52,12 @@ class ConfigError(Exception):
 
 RANGE_OPERATORS = {"GT", "GE", "LT", "LE"}
 ROLE_PREFIX = "ROLE_"
+DICT_VALUE_TYPE_TO_JAVA = {
+    "string": "String",
+    "integer": "Integer",
+    "long": "Long",
+    "boolean": "Boolean",
+}
 
 
 def load_config(path: Path) -> Dict[str, Any]:
@@ -113,6 +121,96 @@ def _next_seed_id(seed_data: List[Dict[str, Any]]) -> int:
     if not numeric_ids:
         return 1
     return max(numeric_ids) + 1
+
+
+def _normalize_dictionary_value(value: Any, value_type: str) -> Any:
+    if value_type == "string":
+        return str(value)
+    if value_type in {"integer", "long"}:
+        return int(value)
+    if value_type == "boolean":
+        if isinstance(value, bool):
+            return value
+        lowered = str(value).strip().lower()
+        if lowered in {"1", "true"}:
+            return True
+        if lowered in {"0", "false"}:
+            return False
+    raise ValueError(f"unsupported dictionary value '{value}' for type '{value_type}'")
+
+
+def _is_dictionary_value_compatible(value: Any, value_type: str) -> bool:
+    if value_type == "string":
+        return isinstance(value, str)
+    if value_type in {"integer", "long"}:
+        return isinstance(value, int) and not isinstance(value, bool)
+    if value_type == "boolean":
+        return isinstance(value, bool)
+    return False
+
+
+def _parse_dictionaries(
+    payload: Dict[str, Any], issues: List[ParseIssue]
+) -> List[DictionaryIR]:
+    dictionaries: List[DictionaryIR] = []
+    seen_keys: set[str] = set()
+
+    for index, dictionary_cfg in enumerate(payload.get("dictionaries", [])):
+        path = f"dictionaries[{index}]"
+        dict_key = str(dictionary_cfg["key"]).strip()
+        if dict_key in seen_keys:
+            issues.append(
+                ParseIssue(
+                    path=f"{path}.key",
+                    message=f"duplicated dictionary key '{dict_key}'",
+                )
+            )
+            continue
+        seen_keys.add(dict_key)
+        value_type = str(dictionary_cfg["valueType"])
+        items: List[DictionaryItemIR] = []
+        seen_values: set[tuple[str, Any]] = set()
+        for item_index, item_cfg in enumerate(dictionary_cfg["items"]):
+            item_path = f"{path}.items[{item_index}]"
+            raw_value = item_cfg["value"]
+            if not _is_dictionary_value_compatible(raw_value, value_type):
+                issues.append(
+                    ParseIssue(
+                        path=f"{item_path}.value",
+                        message=f"value must match dictionary valueType '{value_type}'",
+                    )
+                )
+                continue
+            normalized_value = _normalize_dictionary_value(raw_value, value_type)
+            dedupe_key = (value_type, normalized_value)
+            if dedupe_key in seen_values:
+                issues.append(
+                    ParseIssue(
+                        path=f"{item_path}.value",
+                        message=f"duplicated dictionary value '{normalized_value}'",
+                    )
+                )
+                continue
+            seen_values.add(dedupe_key)
+            items.append(
+                DictionaryItemIR(
+                    label=str(item_cfg["label"]),
+                    value=normalized_value,
+                    sort=int(item_cfg.get("sort", 0)),
+                    enabled=bool(item_cfg.get("enabled", True)),
+                )
+            )
+
+        dictionaries.append(
+            DictionaryIR(
+                key=dict_key,
+                name=str(dictionary_cfg["name"]),
+                value_type=value_type,
+                items=items,
+            )
+        )
+
+    return dictionaries
 
 
 def _collect_rbac_permissions(
@@ -259,6 +357,165 @@ def _ensure_rbac_seed_data(
         next_role_permission_id += 1
 
 
+def _dictionary_seed_value(value: Any, value_type: str) -> str:
+    normalized = _normalize_dictionary_value(value, value_type)
+    if value_type == "boolean":
+        return "true" if normalized else "false"
+    return str(normalized)
+
+
+def _inject_dictionary_tables(payload: Dict[str, Any]) -> None:
+    existing_tables = {t["name"] for t in payload.get("tables", [])}
+    dictionary_tables = []
+
+    if "sys_dict_type" not in existing_tables:
+        dictionary_tables.append(
+            {
+                "name": "sys_dict_type",
+                "comment": "Dictionary Type",
+                "entityName": "SysDictType",
+                "primaryKey": "id",
+                "auth": {
+                    "permissions": {
+                        "query": "system:dict-type:view",
+                        "create": "system:dict-type:add",
+                        "update": "system:dict-type:edit",
+                        "delete": "system:dict-type:delete",
+                    }
+                },
+                "queryableFields": [
+                    {"name": "dict_key", "operator": "LIKE"},
+                    {"name": "dict_name", "operator": "LIKE"},
+                ],
+                "sortableFields": ["dict_key", "created_at"],
+                "frontend": {
+                    "menuTitle": "Dictionary Types",
+                    "menuIcon": "el-icon-collection-tag",
+                },
+                "fields": [
+                    {"name": "id", "type": "bigint", "nullable": False, "idType": "AUTO", "comment": "ID"},
+                    {"name": "dict_key", "type": "varchar(64)", "nullable": False, "unique": True, "comment": "Dictionary Key"},
+                    {"name": "dict_name", "type": "varchar(128)", "nullable": False, "comment": "Dictionary Name"},
+                    {"name": "value_type", "type": "varchar(32)", "nullable": False, "comment": "Dictionary Value Type"},
+                    {"name": "created_at", "type": "datetime", "nullable": False, "autoFill": "INSERT", "comment": "Created Time"},
+                ],
+            }
+        )
+
+    if "sys_dict_item" not in existing_tables:
+        dictionary_tables.append(
+            {
+                "name": "sys_dict_item",
+                "comment": "Dictionary Item",
+                "entityName": "SysDictItem",
+                "primaryKey": "id",
+                "auth": {
+                    "permissions": {
+                        "query": "system:dict-item:view",
+                        "create": "system:dict-item:add",
+                        "update": "system:dict-item:edit",
+                        "delete": "system:dict-item:delete",
+                    }
+                },
+                "queryableFields": [
+                    {"name": "dict_type_id", "operator": "EQ"},
+                    {"name": "item_label", "operator": "LIKE"},
+                ],
+                "sortableFields": ["dict_type_id", "sort", "created_at"],
+                "frontend": {
+                    "menuTitle": "Dictionary Items",
+                    "menuIcon": "el-icon-tickets",
+                },
+                "foreignKeys": [
+                    {
+                        "columns": ["dict_type_id"],
+                        "refTable": "sys_dict_type",
+                        "refColumns": ["id"],
+                    }
+                ],
+                "fields": [
+                    {"name": "id", "type": "bigint", "nullable": False, "idType": "AUTO", "comment": "ID"},
+                    {"name": "dict_type_id", "type": "bigint", "nullable": False, "comment": "Dictionary Type ID"},
+                    {"name": "item_label", "type": "varchar(128)", "nullable": False, "comment": "Dictionary Item Label"},
+                    {"name": "item_value", "type": "varchar(128)", "nullable": False, "comment": "Dictionary Item Value"},
+                    {"name": "sort", "type": "int", "nullable": False, "comment": "Sort Order"},
+                    {"name": "enabled", "type": "tinyint(1)", "nullable": False, "comment": "Enabled Status"},
+                    {"name": "created_at", "type": "datetime", "nullable": False, "autoFill": "INSERT", "comment": "Created Time"},
+                ],
+            }
+        )
+
+    payload["tables"] = dictionary_tables + payload.get("tables", [])
+
+
+def _ensure_dictionary_seed_data(
+    tables: List[TableIR], dictionaries: List[DictionaryIR]
+) -> None:
+    if not dictionaries:
+        return
+
+    table_by_name = {table.name: table for table in tables}
+    if "sys_dict_type" not in table_by_name or "sys_dict_item" not in table_by_name:
+        return
+
+    dict_type_table = table_by_name["sys_dict_type"]
+    dict_item_table = table_by_name["sys_dict_item"]
+
+    type_seed_by_key: Dict[str, Dict[str, Any]] = {}
+    for seed_row in dict_type_table.seed_data:
+        dict_key = seed_row.get("dict_key")
+        if isinstance(dict_key, str) and dict_key.strip():
+            type_seed_by_key[dict_key] = seed_row
+
+    next_type_id = _next_seed_id(dict_type_table.seed_data)
+    for dictionary in dictionaries:
+        if dictionary.key in type_seed_by_key:
+            seed_row = type_seed_by_key[dictionary.key]
+            seed_row["dict_name"] = dictionary.name
+            seed_row["value_type"] = dictionary.value_type
+            continue
+        seed_row = {
+            "id": next_type_id,
+            "dict_key": dictionary.key,
+            "dict_name": dictionary.name,
+            "value_type": dictionary.value_type,
+            "created_at": "2024-01-01 00:00:00",
+        }
+        dict_type_table.seed_data.append(seed_row)
+        type_seed_by_key[dictionary.key] = seed_row
+        next_type_id += 1
+
+    existing_item_keys = {
+        (
+            int(seed_row["dict_type_id"]),
+            str(seed_row["item_value"]),
+        )
+        for seed_row in dict_item_table.seed_data
+        if seed_row.get("dict_type_id") is not None and seed_row.get("item_value") is not None
+    }
+    next_item_id = _next_seed_id(dict_item_table.seed_data)
+    for dictionary in dictionaries:
+        dict_type_id = int(type_seed_by_key[dictionary.key]["id"])
+        for item in dictionary.items:
+            item_value = _dictionary_seed_value(item.value, dictionary.value_type)
+            dedupe_key = (dict_type_id, item_value)
+            if dedupe_key in existing_item_keys:
+                continue
+            dict_item_table.seed_data.append(
+                {
+                    "id": next_item_id,
+                    "dict_type_id": dict_type_id,
+                    "item_label": item.label,
+                    "item_value": item_value,
+                    "sort": item.sort,
+                    "enabled": item.enabled,
+                    "created_at": "2024-01-01 00:00:00",
+                }
+            )
+            existing_item_keys.add(dedupe_key)
+            next_item_id += 1
+
+
 def parse_config(payload: Dict[str, Any]) -> ProjectIR:
     issues: List[ParseIssue] = []
 
@@ -273,6 +530,8 @@ def parse_config(payload: Dict[str, Any]) -> ProjectIR:
     backend_cfg = payload.get("backend", {})
     frontend_cfg = payload.get("frontend", {})
     global_cfg = payload["global"]
+    dictionaries_ir = _parse_dictionaries(payload, issues)
+    dictionary_by_key = {item.key: item for item in dictionaries_ir}
 
     security_cfg = payload.get("security", {})
     jwt_cfg = security_cfg.get("jwt", {})
@@ -315,6 +574,8 @@ def parse_config(payload: Dict[str, Any]) -> ProjectIR:
 
     if security_ir.enabled:
         _inject_rbac_tables(payload, security_ir.rbac)
+    if dictionaries_ir:
+        _inject_dictionary_tables(payload)
 
     if not _is_valid_package(project_cfg["basePackage"]):
         issues.append(
@@ -379,6 +640,38 @@ def parse_config(payload: Dict[str, Any]) -> ProjectIR:
                 logic_delete_count += 1
 
             field_frontend_cfg = field_cfg.get("frontend", {})
+            dict_key = field_cfg.get("dictKey")
+            dict_value_type = None
+            if dict_key is not None:
+                dict_key = str(dict_key).strip()
+                dictionary = dictionary_by_key.get(dict_key)
+                if dictionary is None:
+                    issues.append(
+                        ParseIssue(
+                            path=f"{field_path}.dictKey",
+                            message=f"unknown dictionary '{dict_key}'",
+                        )
+                    )
+                else:
+                    dict_value_type = dictionary.value_type
+                    expected_java_type = DICT_VALUE_TYPE_TO_JAVA[dictionary.value_type]
+                    if java_type != expected_java_type:
+                        issues.append(
+                            ParseIssue(
+                                path=f"{field_path}.dictKey",
+                                message=(
+                                    f"dictionary '{dict_key}' expects Java type "
+                                    f"'{expected_java_type}', got '{java_type}'"
+                                ),
+                            )
+                        )
+                if "options" in field_frontend_cfg:
+                    issues.append(
+                        ParseIssue(
+                            path=f"{field_path}.frontend.options",
+                            message="cannot be used together with dictKey",
+                        )
+                    )
             field_frontend = FieldFrontendIR(
                 label=field_frontend_cfg.get("label", ""),
                 component=field_frontend_cfg.get("component", ""),
@@ -406,6 +699,8 @@ def parse_config(payload: Dict[str, Any]) -> ProjectIR:
                 auto_fill=field_cfg.get("autoFill"),
                 id_type=field_cfg.get("idType"),
                 is_primary=False,
+                dict_key=dict_key if dict_key else None,
+                dict_value_type=dict_value_type,
                 frontend=field_frontend,
             )
             fields.append(field_ir)
@@ -1066,6 +1361,8 @@ def parse_config(payload: Dict[str, Any]) -> ProjectIR:
 
     if security_ir.enabled:
         _ensure_rbac_seed_data(tables, relations, security_ir.rbac)
+    if dictionaries_ir:
+        _ensure_dictionary_seed_data(tables, dictionaries_ir)
 
     if issues:
         raise ConfigError(issues)
@@ -1113,6 +1410,7 @@ def parse_config(payload: Dict[str, Any]) -> ProjectIR:
             backend_url=frontend_cfg.get("backendUrl", "http://127.0.0.1:8080"),
             dev_port=int(frontend_cfg.get("devPort", 8081)),
         ),
+        dictionaries=dictionaries_ir,
         tables=tables,
         relations=relations,
     )

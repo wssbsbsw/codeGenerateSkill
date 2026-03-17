@@ -1,0 +1,43 @@
+{
+  "project": {
+    "groupId": "com.example",
+    "artifactId": "preset-api-only",
+    "name": "preset-api-only",
+    "basePackage": "com.example.apionly",
+    "bootVersion": "2.7.18",
+    "javaVersion": 8
+  },
+  "datasource": {
+    "url": "jdbc:mysql://127.0.0.1:3306/preset_api_only?useSSL=false&serverTimezone=UTC",
+    "databaseName": "preset_api_only",
+    "username": "root",
+    "password": "root",
+    "driverClassName": "com.mysql.cj.jdbc.Driver"
+  },
+  "tables": [
+    {
+      "name": "customers",
+      "comment": "客户",
+      "entityName": "Customer",
+      "primaryKey": "id",
+      "queryableFields": [
+        {"name": "customer_name", "operator": "LIKE"},
+        {"name": "status", "operator": "EQ"}
+      ],
+      "sortableFields": ["id", "customer_name", "created_at"],
+      "fields": [
+        {"name": "id", "type": "bigint", "nullable": false, "idType": "AUTO", "comment": "主键"},
+        {"name": "customer_name", "type": "varchar(128)", "nullable": false, "comment": "客户名称"},
+        {"name": "status", "type": "int", "nullable": false, "comment": "状态"},
+        {"name": "created_at", "type": "datetime", "nullable": false, "autoFill": "INSERT", "comment": "创建时间"}
+      ]
+    }
+  ],
+  "relations": [],
+  "global": {
+    "apiPrefix": "/api",
+    "author": "codegen",
+    "dateTimeFormat": "yyyy-MM-dd HH:mm:ss",
+    "enableSwagger": false
+  }
+}

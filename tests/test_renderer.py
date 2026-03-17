@@ -271,6 +271,77 @@ class RendererTest(unittest.TestCase):
         self.assertIn("'ROLE_USER'", init_sql)
         self.assertIn("'product:force_delete'", init_sql)
 
+    def test_render_dictionaries_generate_backend_frontend_and_excel_mapping(self) -> None:
+        payload = json.loads(json.dumps(self.sample_payload))
+        payload["security"] = {
+            "enabled": True,
+            "jwt": {"secret": "my-super-secret-key-that-is-very-long"},
+        }
+        payload["frontend"] = {
+            "enabled": True,
+            "framework": "vue2",
+            "locale": "en-US",
+            "outputDir": "frontend",
+            "appTitle": "Demo Admin",
+            "backendUrl": "http://127.0.0.1:8080",
+            "devPort": 8081,
+        }
+        payload["dictionaries"] = [
+            {
+                "key": "user_status",
+                "name": "User Status",
+                "valueType": "integer",
+                "items": [
+                    {"label": "Disabled", "value": 0, "sort": 10, "enabled": True},
+                    {"label": "Enabled", "value": 1, "sort": 20, "enabled": True},
+                ],
+            }
+        ]
+        payload["tables"][0]["fields"][2]["dictKey"] = "user_status"
+        payload["relations"][0]["select"].append(
+            {"table": "users", "field": "status", "alias": "userStatus"}
+        )
+        payload["relations"][0]["filters"].append(
+            {"table": "users", "field": "status", "operator": "EQ", "param": "status"}
+        )
+
+        project = parse_config(payload)
+        files = CodeRenderer().render_project(project)
+
+        init_sql = files["backend/src/main/resources/init.sql"]
+        user_export_dto = files[
+            "backend/src/main/java/com/example/demo/dto/UserExportDto.java"
+        ]
+        user_controller = files[
+            "backend/src/main/java/com/example/demo/controller/UserController.java"
+        ]
+        dictionary_controller = files[
+            "backend/src/main/java/com/example/demo/controller/DictionaryController.java"
+        ]
+        dictionary_service = files[
+            "backend/src/main/java/com/example/demo/service/impl/DictionaryServiceImpl.java"
+        ]
+        users_view = files["frontend/src/views/users/index.vue"]
+        relation_view = files["frontend/src/views/relations/order-user/index.vue"]
+        dictionary_util = files["frontend/src/utils/dictionary.js"]
+        dictionary_api = files["frontend/src/api/dictionary.js"]
+
+        self.assertIn("CREATE TABLE IF NOT EXISTS `sys_dict_type`", init_sql)
+        self.assertIn("INSERT INTO `sys_dict_type`", init_sql)
+        self.assertIn("user_status", init_sql)
+        self.assertIn("system:dict-type:view", init_sql)
+        self.assertIn("system:dict-item:view", init_sql)
+        self.assertIn("private String status;", user_export_dto)
+        self.assertIn('dictionaryService.resolveLabel("user_status"', user_controller)
+        self.assertIn('dictionaryService.resolveValue("user_status"', user_controller)
+        self.assertIn('@GetMapping("/{dictKey}/items")', dictionary_controller)
+        self.assertIn("listEnabledOptions", dictionary_service)
+        self.assertIn("dictionaryOptions['user_status']", users_view)
+        self.assertIn('import { loadDictionaryOptions, formatDictionaryValue } from "@/utils/dictionary"', users_view)
+        self.assertIn("dictionaryOptions", relation_view)
+        self.assertIn("fetchDictionaryItems", dictionary_api)
+        self.assertIn("formatDictionaryValue", dictionary_util)
+
     def test_render_vue2_frontend_project(self) -> None:
         payload = json.loads(json.dumps(self.sample_payload))
         payload["frontend"] = {

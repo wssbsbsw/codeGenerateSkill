@@ -1,0 +1,14 @@
+package {{ package }}.service;
+
+import {{ package }}.dto.DictionaryOption;
+
+import java.util.List;
+
+public interface DictionaryService {
+
+    List<DictionaryOption> listEnabledOptions(String dictKey);
+
+    String resolveLabel(String dictKey, Object value);
+
+    Object resolveValue(String dictKey, String rawInput);
+}

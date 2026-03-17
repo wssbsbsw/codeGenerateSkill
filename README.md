@@ -22,6 +22,7 @@ It is designed for fast scaffolding of admin-style backends and goes beyond simp
 - `application.yml` with environment-variable datasource placeholders
 - `init.sql` with database creation, implicit RBAC system tables (`sys_user`, etc.), explicit/inferred constraints, and seed data
 - Auto-generated Swagger/Knife4j API documentation via Controller and DTO annotations
+- Top-level reusable dictionaries with generated dictionary tables, APIs, frontend option loading, and Excel label/value conversion
 - `POST /import` batch import endpoint (EasyExcel) paired with every `/export` endpoint
 - `POST /auth/change-password` secure password change (verifies old password before encoding new one)
 - Operation log AOP (`@SystemLog` annotation + aspect + `sys_log` table) auto-recording create/update/delete calls
@@ -76,6 +77,14 @@ Common output files:
 - `src/main/java/<basePackage>/controller/*` (With `@PreAuthorize` and `/export`)
 - `src/test/java/<basePackage>/controller/*Test.java` (MockMvc tests)
 - `frontend/src/views/login/index.vue`
+
+Preset starting points:
+
+- `examples/preset_api_only.json` - backend-only API starter
+- `examples/preset_backend_frontend.json` - backend + Vue2 admin starter with dictionaries
+- `examples/preset_saas_multi_tenant.json` - security + tenant + frontend SaaS starter
+- `examples/preset_audit_admin.json` - audit/admin starter with upload + status dictionaries
+- `examples/preset_light_auth.json` - minimal JWT/RBAC starter
 
 ## Configuration Rule Highlights
 
@@ -154,6 +163,42 @@ Easily generate interactive Swagger 2 / Knife4j endpoints by toggling this boole
 When enabled, the CLI automatically generates a `SwaggerConfig` class and injects parameter documentation across Entities, controllers, and generated DTOs.
 It also writes `spring.mvc.pathmatch.matching-strategy: ant_path_matcher` for Spring Boot 2.6+ compatibility and exposes the standard Knife4j / Swagger endpoints in the generated security config.
 That means a freshly generated security-enabled project can both start and open `/doc.html` without the two common post-generation fixes.
+
+### Dictionaries (`dictionaries` + `fields[].dictKey`)
+
+Define reusable global dictionaries at the top level and bind business fields to them with `dictKey`:
+
+```json
+"dictionaries": [
+  {
+    "key": "user_status",
+    "name": "User Status",
+    "valueType": "integer",
+    "items": [
+      { "label": "Disabled", "value": 0, "sort": 10, "enabled": true },
+      { "label": "Enabled", "value": 1, "sort": 20, "enabled": true }
+    ]
+  }
+]
+```
+
+```json
+{
+  "name": "status",
+  "type": "int",
+  "nullable": false,
+  "dictKey": "user_status"
+}
+```
+
+When dictionaries are configured:
+
+- the generator injects `sys_dict_type` and `sys_dict_item` into `init.sql`
+- generated backend includes dictionary CRUD plus `GET /api/system/dictionaries/{dictKey}/items`
+- Vue2 pages load options remotely and display labels instead of raw values
+- Excel export writes labels, and Excel import accepts either labels or raw values
+
+`dictKey` and `frontend.options` are intentionally mutually exclusive.
 
 ### File Uploads (`backend.uploadDir`)
 

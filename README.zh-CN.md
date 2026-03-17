@@ -21,6 +21,7 @@
 - 本地文件上传接口 (`FileController`) 及静态资源映射
 - 包含内置 RBAC 系统表（`sys_user` 等）、外键、索引及种子数据的 `init.sql`
 - 开箱即用的 Swagger/Knife4j API 接口文档
+- 顶层可复用字典系统，自动生成字典表、查询接口、前端下拉加载，以及 Excel 标签/值双向转换
 - 每张业务表自动生成 `POST /import` Excel 批量导入接口（EasyExcel）
 - `POST /auth/change-password` 密码修改接口（验旧后 BCrypt 加密保存）
 - 操作日志 AOP（`@SystemLog` 注解 + 切面 + `sys_log` 表，create/update/delete/import 自动留痕）
@@ -72,6 +73,14 @@ python -m codegen -c examples/sample_security.json -o /tmp/codegen-out
 - `src/main/java/<basePackage>/controller/*`（包含鉴权注解和导出接口）
 - `src/test/java/<basePackage>/controller/*Test.java`（单元测试）
 - `frontend/src/views/login/index.vue`（前端登录页）
+
+推荐起步模板：
+
+- `examples/preset_api_only.json`：纯后台 API 起步
+- `examples/preset_backend_frontend.json`：后台 + Vue2 前端起步，内含字典能力
+- `examples/preset_saas_multi_tenant.json`：安全 + 多租户 + 前端 SaaS 起步
+- `examples/preset_audit_admin.json`：审计型后台起步，包含上传与状态字典
+- `examples/preset_light_auth.json`：轻权限 JWT/RBAC 起步
 
 ## 核心新配置规则说明
 
@@ -150,6 +159,42 @@ python -m codegen -c examples/sample_security.json -o /tmp/codegen-out
 开启后后端的项目 `pom.xml` 中将自动注入 `@github.xiaoymin:knife4j-spring-boot-starter` 依赖，并附带针对所有 DTO 类以及控制器的各种注解说明。
 同时会自动写入 `spring.mvc.pathmatch.matching-strategy: ant_path_matcher`，并在安全配置中放行常见的 Knife4j / Swagger 文档路径。
 也就是说，生成后的安全项目默认就能启动并直接打开 `/doc.html`，不需要再手工补 Springfox 兼容和权限放行。
+
+### 字典系统（`dictionaries` + `fields[].dictKey`）
+
+可以在顶层定义可复用字典，再在字段上通过 `dictKey` 绑定：
+
+```json
+"dictionaries": [
+  {
+    "key": "user_status",
+    "name": "用户状态",
+    "valueType": "integer",
+    "items": [
+      { "label": "禁用", "value": 0, "sort": 10, "enabled": true },
+      { "label": "启用", "value": 1, "sort": 20, "enabled": true }
+    ]
+  }
+]
+```
+
+```json
+{
+  "name": "status",
+  "type": "int",
+  "nullable": false,
+  "dictKey": "user_status"
+}
+```
+
+开启后：
+
+- 生成器会自动注入 `sys_dict_type`、`sys_dict_item` 并写入种子数据
+- 后端会生成字典管理 CRUD 以及 `GET /api/system/dictionaries/{dictKey}/items`
+- Vue2 页面会远程加载字典选项，并显示标签而不是底层值
+- Excel 导出写标签，Excel 导入同时兼容标签和值
+
+`dictKey` 和 `frontend.options` 不能同时出现。
 
 ### 文件上传 (`backend.uploadDir`)
 

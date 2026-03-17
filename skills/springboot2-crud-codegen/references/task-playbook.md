@@ -15,6 +15,11 @@
    - `examples/sample.json`：基础双表与联表
    - `examples/student_class_management.json`：更完整的学生/班级管理
    - `examples/sample_security.json`：权限、多租户、前端、企业级能力
+   - `examples/preset_api_only.json`：纯后台 API
+   - `examples/preset_backend_frontend.json`：后台 + 前端 + 字典
+   - `examples/preset_saas_multi_tenant.json`：多租户 SaaS
+   - `examples/preset_audit_admin.json`：审计后台
+   - `examples/preset_light_auth.json`：轻权限项目
 2. 再读 `references/config-guide.md`，确认顶层键、`tables[]`、`relations[]`、`global`、`security`、`frontend` 的要求。
 3. 增量修改配置，优先保持已有结构；不要一次性引入大量新字段。
 4. 修改后立即运行：

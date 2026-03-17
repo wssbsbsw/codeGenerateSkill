@@ -5,6 +5,7 @@
 - [先记住这 8 条](#先记住这-8-条)
 - [顶层结构](#顶层结构)
 - [安全与权限配置 (Security/RBAC)](#安全与权限配置-securityrbac)
+- [字典配置 (Dictionaries)](#字典配置-dictionaries)
 - [多租户配置 (Multi-tenancy)](#多租户配置-multi-tenancy)
 - [后端与其他配置](#后端与其他配置)
 - [`tables[]` 完整说明](#tables-完整说明)
@@ -142,6 +143,43 @@
 - 自动分析所有表(`table.comment`)及字段(`field.comment`)信息，利用 `@Api`、`@ApiOperation`、`@ApiModel`、`@ApiModelProperty` 等注解在生成的 Controller、Entities 以及 DTO 类上提供清晰友好的文档注释。
 - 生成的 `application.yml` 会自动写入 `spring.mvc.pathmatch.matching-strategy: ant_path_matcher`，用于 Spring Boot 2.6+ 与 Springfox/Knife4j 的兼容。
 - 生成的 `WebSecurityConfig` 会自动放行 `/doc.html`、`/swagger-ui/**`、`/swagger-resources/**`、`/v2/api-docs`、`/webjars/**` 等文档路径。启动后可访问 `/doc.html` 查看。
+
+## 字典配置 (Dictionaries)
+
+顶层可以声明可复用字典：
+
+```json
+"dictionaries": [
+  {
+    "key": "user_status",
+    "name": "用户状态",
+    "valueType": "integer",
+    "items": [
+      {"label": "禁用", "value": 0, "sort": 10, "enabled": true},
+      {"label": "启用", "value": 1, "sort": 20, "enabled": true}
+    ]
+  }
+]
+```
+
+字段通过 `dictKey` 绑定：
+
+```json
+{
+  "name": "status",
+  "type": "int",
+  "nullable": false,
+  "dictKey": "user_status"
+}
+```
+
+**行为说明**：
+- `dictKey` 必须引用已存在的顶层字典。
+- `dictKey` 和 `frontend.options` 不能同时使用。
+- 生成器会自动注入 `sys_dict_type`、`sys_dict_item` 及其种子数据。
+- 后端额外生成字典管理 CRUD 与 `GET /api/system/dictionaries/{dictKey}/items`。
+- 前端表单和查询会远程拉取字典选项。
+- 导出 Excel 写标签，导入 Excel 同时接受标签和值。
 
 ## 后端与其他配置
 

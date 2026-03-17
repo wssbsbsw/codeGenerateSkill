@@ -11,6 +11,22 @@ class FrontendOptionIR:
 
 
 @dataclass(slots=True)
+class DictionaryItemIR:
+    label: str
+    value: Any
+    sort: int = 0
+    enabled: bool = True
+
+
+@dataclass(slots=True)
+class DictionaryIR:
+    key: str
+    name: str
+    value_type: str
+    items: List[DictionaryItemIR] = field(default_factory=list)
+
+
+@dataclass(slots=True)
 class FieldFrontendIR:
     label: str = ""
     component: str = ""
@@ -102,6 +118,8 @@ class FieldIR:
     auto_fill: Optional[str] = None
     id_type: Optional[str] = None
     is_primary: bool = False
+    dict_key: Optional[str] = None
+    dict_value_type: Optional[str] = None
     frontend: FieldFrontendIR = field(default_factory=FieldFrontendIR)
 
 
@@ -276,6 +294,7 @@ class ProjectIR:
     security: SecurityIR = field(default_factory=SecurityIR)
     backend: BackendIR = field(default_factory=BackendIR)
     frontend: FrontendIR = field(default_factory=FrontendIR)
+    dictionaries: List[DictionaryIR] = field(default_factory=list)
     tables: List[TableIR] = field(default_factory=list)
     relations: List[RelationIR] = field(default_factory=list)
 

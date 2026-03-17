@@ -18,9 +18,11 @@ description: Work with the `springboot2-crud-codegen` repository to create or re
 ## 默认执行流程
 
 1. 选择最接近的示例配置作为起点。
-   - 完整后台 + 权限 + 多租户 + 前端：`examples/sample_security.json`
+   - 完整后台 + 权限 + 多租户 + 前端：`examples/sample_security.json` 或 `examples/preset_saas_multi_tenant.json`
    - 单表最小 CRUD：`examples/student_single_table.json`
    - 双表或联表：`examples/sample.json` 或 `examples/student_class_management.json`
+   - 纯后台 API：`examples/preset_api_only.json`
+   - 后台 + 前端 + 字典：`examples/preset_backend_frontend.json`
 2. 先改配置或源码，再用真实命令验证；不要只靠静态阅读判断结果。
 3. 每次配置改动后至少重新运行一次 `python -m codegen -c <config> -o <tmp>`，确认输出目录为 `<output>/<artifactId>/`。
 4. 每次生成器行为改动后至少运行：

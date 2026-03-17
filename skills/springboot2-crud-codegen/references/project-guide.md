@@ -65,6 +65,11 @@
 - `examples/sample.json`：双表与基础联表查询
 - `examples/student_class_management.json`：更完整的教学管理示例
 - `examples/sample_security.json`：权限、多租户、前端、企业级能力最全的起点
+- `examples/preset_api_only.json`：纯后台 API 起步
+- `examples/preset_backend_frontend.json`：后台 + 前端 + 字典起步
+- `examples/preset_saas_multi_tenant.json`：SaaS 多租户起步
+- `examples/preset_audit_admin.json`：审计型后台起步
+- `examples/preset_light_auth.json`：轻权限起步
 
 优先复制最近的示例再增量修改，不要从空白 JSON 开始拼大配置。
 

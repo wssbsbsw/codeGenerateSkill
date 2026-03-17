@@ -156,6 +156,7 @@ class CodeRenderer:
         base_context = {
             "project": project,
             "package": project.base_package,
+            "has_dictionaries": bool(project.dictionaries),
             "datasource_placeholders": self._datasource_placeholders(project),
             "insert_fill_fields": self._auto_fill_fields(project, mode="insert"),
             "update_fill_fields": self._auto_fill_fields(project, mode="update"),
@@ -242,6 +243,19 @@ class CodeRenderer:
                 "security/AuthController.java.j2", **base_context
             )
 
+        if project.dictionaries:
+            files[f"{java_root}/dto/DictionaryOption.java"] = self._render(
+                "dto/DictionaryOption.java.j2", **base_context
+            )
+            files[f"{java_root}/service/DictionaryService.java"] = self._render(
+                "service/DictionaryService.java.j2", **base_context
+            )
+            files[f"{java_root}/service/impl/DictionaryServiceImpl.java"] = self._render(
+                "service_impl/DictionaryServiceImpl.java.j2", **base_context
+            )
+            files[f"{java_root}/controller/DictionaryController.java"] = self._render(
+                "controller/DictionaryController.java.j2", **base_context
+            )
 
         # Dashboard statistics controller – always generated
         dashboard_context = {
@@ -266,6 +280,7 @@ class CodeRenderer:
             sortable_fields = [
                 self._sortable_field_context(item) for item in table.sortable_fields
             ]
+            dictionary_fields = self._dictionary_field_contexts(table)
             table_context = {
                 **base_context,
                 "table": table,
@@ -276,6 +291,11 @@ class CodeRenderer:
                 "query_fields": self._query_field_contexts(table.queryable_fields),
                 "sortable_fields": sortable_fields,
                 "has_sorting": bool(sortable_fields),
+                "dictionary_fields": dictionary_fields,
+                "has_dictionary_fields": bool(dictionary_fields),
+                "dictionary_ignore_properties_java": self._dictionary_ignore_properties_java(
+                    dictionary_fields
+                ),
                 "relation_methods": [
                     {
                         "method_name": relation.method_name,
@@ -433,8 +453,9 @@ class CodeRenderer:
                 continue
             fields.append({
                 "property_name": field.property_name,
-                "java_type": field.java_type,
-                "label": self._frontend_label(field, field.property_name, locale)
+                "java_type": "String" if field.dict_key else field.java_type,
+                "label": self._frontend_label(field, field.property_name, locale),
+                "dict_key": field.dict_key or "",
             })
         return fields
 
@@ -563,6 +584,36 @@ class CodeRenderer:
             "side": sortable_field.side,
         }
 
+    def _dictionary_field_contexts(self, table: TableIR) -> List[Dict[str, str]]:
+        fields: List[Dict[str, str]] = []
+        for field in table.fields:
+            if (
+                not field.dict_key
+                or field.logic_delete
+                or (
+                    field.java_type == "String"
+                    and "password" in field.property_name.lower()
+                )
+            ):
+                continue
+            fields.append(
+                {
+                    "property_name": field.property_name,
+                    "method_suffix": field.property_name[:1].upper()
+                    + field.property_name[1:],
+                    "dict_key": field.dict_key,
+                    "java_type": field.java_type,
+                }
+            )
+        return fields
+
+    def _dictionary_ignore_properties_java(
+        self, dictionary_fields: Iterable[Dict[str, str]]
+    ) -> str:
+        return ", ".join(
+            f'"{field["property_name"]}"' for field in dictionary_fields
+        )
+
     def _render_vue2_frontend(self, project: ProjectIR) -> Dict[str, str]:
         files: Dict[str, str] = {}
         locale = project.frontend.locale
@@ -626,6 +677,13 @@ class CodeRenderer:
             f"{frontend_root}/src/utils/format.js": "frontend/src/utils/format.js.j2",
             f"{frontend_root}/src/views/dashboard/index.vue": "frontend/src/views/dashboard/index.vue.j2",
         }
+        if project.dictionaries:
+            shared_files[f"{frontend_root}/src/api/dictionary.js"] = (
+                "frontend/src/api/dictionary.js.j2"
+            )
+            shared_files[f"{frontend_root}/src/utils/dictionary.js"] = (
+                "frontend/src/utils/dictionary.js.j2"
+            )
         for file_path, template_name in shared_files.items():
             files[file_path] = self._render(template_name, **frontend_context)
 
@@ -736,6 +794,9 @@ class CodeRenderer:
             for field in table.fields
             if not field.logic_delete and field.frontend.detail_visible
         ]
+        dictionary_keys = self._frontend_dictionary_keys(
+            query_fields + form_fields + table_columns + detail_fields
+        )
         sort_options = [
             self._frontend_sort_option(
                 sort_item,
@@ -785,6 +846,8 @@ class CodeRenderer:
             "form_fields": form_fields,
             "table_columns": table_columns,
             "detail_fields": detail_fields,
+            "dictionary_keys": dictionary_keys,
+            "has_dictionaries": bool(dictionary_keys),
             "sort_options": sort_options,
             "has_sorting": bool(sort_options),
             "sort_map": [
@@ -831,6 +894,7 @@ class CodeRenderer:
                     "property_name": item.alias,
                     "label": self._frontend_label(source_field, item.alias, locale),
                     "formatter": self._frontend_formatter(item.java_type),
+                    "dict_key": source_field.dict_key or "",
                 }
             )
 
@@ -841,6 +905,7 @@ class CodeRenderer:
             sort_options.append(
                 self._frontend_sort_option(sort_item, source_field, locale)
             )
+        dictionary_keys = self._frontend_dictionary_keys(query_fields + columns)
 
         title = relation.frontend.menu_title or self._frontend_title(
             locale,
@@ -865,6 +930,8 @@ class CodeRenderer:
             "api_function_name": f"fetch{relation.method_name[:1].upper()}{relation.method_name[1:]}",
             "query_fields": query_fields,
             "columns": columns,
+            "dictionary_keys": dictionary_keys,
+            "has_dictionaries": bool(dictionary_keys),
             "sort_options": sort_options,
             "has_sorting": bool(sort_options),
         }
@@ -876,6 +943,7 @@ class CodeRenderer:
             mode="form",
             component_override=str(field.frontend.component),
             has_options=bool(field.frontend.options),
+            has_dictionary=bool(field.dict_key),
         )
         label = self._frontend_label(field, str(field.property_name), locale)
         
@@ -914,6 +982,7 @@ class CodeRenderer:
                 {"label": item.label, "value": item.value}
                 for item in field.frontend.options
             ],
+            "dict_key": field.dict_key or "",
             "placeholder": self._frontend_placeholder(
                 locale,
                 widget["kind"],
@@ -934,6 +1003,7 @@ class CodeRenderer:
             component_override=str(field.frontend.query_component)
             or str(field.frontend.component),
             has_options=bool(field.frontend.options),
+            has_dictionary=bool(field.dict_key),
         )
         label = self._frontend_label(field, prop_name, locale)
         return {
@@ -948,6 +1018,7 @@ class CodeRenderer:
                 {"label": item.label, "value": item.value}
                 for item in field.frontend.options
             ],
+            "dict_key": field.dict_key or "",
             "placeholder": self._frontend_placeholder(
                 locale,
                 widget["kind"],
@@ -967,6 +1038,7 @@ class CodeRenderer:
             "property_name": property_name,
             "label": self._frontend_label(field, property_name, locale),
             "formatter": self._frontend_formatter(str(field.java_type)),
+            "dict_key": field.dict_key or "",
             "sortable": property_name in sortable_props,
         }
 
@@ -976,7 +1048,21 @@ class CodeRenderer:
             "property_name": property_name,
             "label": self._frontend_label(field, property_name, locale),
             "formatter": self._frontend_formatter(str(field.java_type)),
+            "dict_key": field.dict_key or "",
         }
+
+    def _frontend_dictionary_keys(
+        self, field_contexts: Iterable[Dict[str, object]]
+    ) -> List[str]:
+        keys: List[str] = []
+        seen: set[str] = set()
+        for field in field_contexts:
+            dict_key = str(field.get("dict_key", "") or "")
+            if not dict_key or dict_key in seen:
+                continue
+            seen.add(dict_key)
+            keys.append(dict_key)
+        return keys
 
     def _frontend_sort_option(
         self,
@@ -1011,6 +1097,7 @@ class CodeRenderer:
         mode: str,
         component_override: str = "",
         has_options: bool = False,
+        has_dictionary: bool = False,
     ) -> Dict[str, object]:
         if component_override:
             return self._frontend_widget_from_component(
@@ -1021,13 +1108,13 @@ class CodeRenderer:
                 has_options,
             )
         max_length = db_type_length(db_type)
-        if has_options:
+        if has_dictionary or has_options:
             return self._frontend_widget_from_component(
                 "select",
                 java_type,
                 db_type,
                 mode,
-                has_options,
+                has_options or has_dictionary,
             )
         if java_type == "String":
             kind = (
