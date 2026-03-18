@@ -8,6 +8,8 @@ from typing import Any, Dict, List
 
 from .ir import (
     BackendIR,
+    DictionaryIR,
+    DictionaryItemIR,
     FieldIR,
     FieldFrontendIR,
     FrontendIR,
@@ -49,11 +51,469 @@ class ConfigError(Exception):
 
 
 RANGE_OPERATORS = {"GT", "GE", "LT", "LE"}
+ROLE_PREFIX = "ROLE_"
+DICT_VALUE_TYPE_TO_JAVA = {
+    "string": "String",
+    "integer": "Integer",
+    "long": "Long",
+    "boolean": "Boolean",
+}
 
 
 def load_config(path: Path) -> Dict[str, Any]:
     with path.open("r", encoding="utf-8") as handle:
         return json.load(handle)
+
+
+def _normalize_role_code(raw_role: Any) -> str:
+    role = str(raw_role).strip().upper()
+    if role.startswith(ROLE_PREFIX):
+        return role
+    return f"{ROLE_PREFIX}{role}"
+
+
+def _normalize_role_list(
+    raw_roles: List[Any], path: str, issues: List[ParseIssue]
+) -> List[str]:
+    normalized_roles: List[str] = []
+    seen_roles: set[str] = set()
+    for index, raw_role in enumerate(raw_roles):
+        role = str(raw_role).strip()
+        if not role:
+            issues.append(
+                ParseIssue(
+                    path=f"{path}[{index}]",
+                    message="role must not be blank",
+                )
+            )
+            continue
+        normalized_role = _normalize_role_code(role)
+        if normalized_role in seen_roles:
+            continue
+        seen_roles.add(normalized_role)
+        normalized_roles.append(normalized_role)
+    return normalized_roles
+
+
+def _normalize_required_role(
+    raw_role: Any, path: str, issues: List[ParseIssue], default_role: str
+) -> str:
+    role = str(raw_role).strip()
+    if not role:
+        issues.append(ParseIssue(path=path, message="role must not be blank"))
+        return default_role
+    return _normalize_role_code(role)
+
+
+def _default_role_name(role_code: str) -> str:
+    role_name = role_code
+    if role_name.startswith(ROLE_PREFIX):
+        role_name = role_name[len(ROLE_PREFIX) :]
+    return role_name.replace("_", " ").title()
+
+
+def _next_seed_id(seed_data: List[Dict[str, Any]]) -> int:
+    numeric_ids = [
+        int(item["id"])
+        for item in seed_data
+        if isinstance(item.get("id"), int) or str(item.get("id", "")).isdigit()
+    ]
+    if not numeric_ids:
+        return 1
+    return max(numeric_ids) + 1
+
+
+def _normalize_dictionary_value(value: Any, value_type: str) -> Any:
+    if value_type == "string":
+        return str(value)
+    if value_type in {"integer", "long"}:
+        return int(value)
+    if value_type == "boolean":
+        if isinstance(value, bool):
+            return value
+        lowered = str(value).strip().lower()
+        if lowered in {"1", "true"}:
+            return True
+        if lowered in {"0", "false"}:
+            return False
+    raise ValueError(f"unsupported dictionary value '{value}' for type '{value_type}'")
+
+
+def _is_dictionary_value_compatible(value: Any, value_type: str) -> bool:
+    if value_type == "string":
+        return isinstance(value, str)
+    if value_type in {"integer", "long"}:
+        return isinstance(value, int) and not isinstance(value, bool)
+    if value_type == "boolean":
+        return isinstance(value, bool)
+    return False
+
+
+def _parse_dictionaries(
+    payload: Dict[str, Any], issues: List[ParseIssue]
+) -> List[DictionaryIR]:
+    dictionaries: List[DictionaryIR] = []
+    seen_keys: set[str] = set()
+
+    for index, dictionary_cfg in enumerate(payload.get("dictionaries", [])):
+        path = f"dictionaries[{index}]"
+        dict_key = str(dictionary_cfg["key"]).strip()
+        if dict_key in seen_keys:
+            issues.append(
+                ParseIssue(
+                    path=f"{path}.key",
+                    message=f"duplicated dictionary key '{dict_key}'",
+                )
+            )
+            continue
+        seen_keys.add(dict_key)
+        value_type = str(dictionary_cfg["valueType"])
+        items: List[DictionaryItemIR] = []
+        seen_values: set[tuple[str, Any]] = set()
+        for item_index, item_cfg in enumerate(dictionary_cfg["items"]):
+            item_path = f"{path}.items[{item_index}]"
+            raw_value = item_cfg["value"]
+            if not _is_dictionary_value_compatible(raw_value, value_type):
+                issues.append(
+                    ParseIssue(
+                        path=f"{item_path}.value",
+                        message=f"value must match dictionary valueType '{value_type}'",
+                    )
+                )
+                continue
+            normalized_value = _normalize_dictionary_value(raw_value, value_type)
+            dedupe_key = (value_type, normalized_value)
+            if dedupe_key in seen_values:
+                issues.append(
+                    ParseIssue(
+                        path=f"{item_path}.value",
+                        message=f"duplicated dictionary value '{normalized_value}'",
+                    )
+                )
+                continue
+            seen_values.add(dedupe_key)
+            items.append(
+                DictionaryItemIR(
+                    label=str(item_cfg["label"]),
+                    value=normalized_value,
+                    sort=int(item_cfg.get("sort", 0)),
+                    enabled=bool(item_cfg.get("enabled", True)),
+                )
+            )
+
+        dictionaries.append(
+            DictionaryIR(
+                key=dict_key,
+                name=str(dictionary_cfg["name"]),
+                value_type=value_type,
+                items=items,
+            )
+        )
+
+    return dictionaries
+
+
+def _collect_rbac_permissions(
+    tables: List[TableIR], relations: List[RelationIR]
+) -> List[str]:
+    permissions: List[str] = []
+    seen_permissions: set[str] = set()
+
+    def add_permission(permission: str | None) -> None:
+        if not permission or permission in seen_permissions:
+            return
+        seen_permissions.add(permission)
+        permissions.append(permission)
+
+    for table in tables:
+        if table.auth is None or not table.auth.enabled:
+            continue
+        add_permission(table.auth.permissions.query)
+        add_permission(table.auth.permissions.create)
+        add_permission(table.auth.permissions.update)
+        add_permission(table.auth.permissions.delete)
+
+    for relation in relations:
+        if relation.auth is None or not relation.auth.enabled:
+            continue
+        add_permission(relation.auth.permissions.query)
+
+    return permissions
+
+
+def _ensure_rbac_seed_data(
+    tables: List[TableIR], relations: List[RelationIR], rbac: RbacConfigIR
+) -> None:
+    table_by_name = {table.name: table for table in tables}
+    required_table_names = {
+        "sys_user",
+        "sys_role",
+        "sys_user_role",
+        "sys_menu_permission",
+        "sys_role_permission",
+    }
+    if not required_table_names.issubset(table_by_name):
+        return
+
+    sys_user_table = table_by_name["sys_user"]
+    sys_role_table = table_by_name["sys_role"]
+    sys_user_role_table = table_by_name["sys_user_role"]
+    sys_menu_permission_table = table_by_name["sys_menu_permission"]
+    sys_role_permission_table = table_by_name["sys_role_permission"]
+
+    desired_role_codes = [rbac.super_admin_role] + [
+        role_code
+        for role_code in rbac.default_roles
+        if role_code != rbac.super_admin_role
+    ]
+
+    role_seed_by_code: Dict[str, Dict[str, Any]] = {}
+    for seed_row in sys_role_table.seed_data:
+        role_code = seed_row.get("role_code")
+        if isinstance(role_code, str) and role_code.strip():
+            normalized_role_code = _normalize_role_code(role_code)
+            if normalized_role_code != role_code:
+                seed_row["role_code"] = normalized_role_code
+            role_seed_by_code[normalized_role_code] = seed_row
+
+    next_role_id = _next_seed_id(sys_role_table.seed_data)
+    for role_code in desired_role_codes:
+        if role_code in role_seed_by_code:
+            continue
+        role_seed = {
+            "id": next_role_id,
+            "role_name": _default_role_name(role_code),
+            "role_code": role_code,
+            "created_at": "2024-01-01 00:00:00",
+        }
+        sys_role_table.seed_data.append(role_seed)
+        role_seed_by_code[role_code] = role_seed
+        next_role_id += 1
+
+    admin_user_id = 1
+    for seed_row in sys_user_table.seed_data:
+        if seed_row.get("username") == "admin" and seed_row.get("id") is not None:
+            admin_user_id = int(seed_row["id"])
+            break
+
+    super_admin_role_id = int(role_seed_by_code[rbac.super_admin_role]["id"])
+    existing_user_role_pairs = {
+        (int(seed_row["user_id"]), int(seed_row["role_id"]))
+        for seed_row in sys_user_role_table.seed_data
+        if seed_row.get("user_id") is not None and seed_row.get("role_id") is not None
+    }
+    admin_mapping = (admin_user_id, super_admin_role_id)
+    if admin_mapping not in existing_user_role_pairs:
+        sys_user_role_table.seed_data.append(
+            {
+                "id": _next_seed_id(sys_user_role_table.seed_data),
+                "user_id": admin_user_id,
+                "role_id": super_admin_role_id,
+            }
+        )
+
+    permission_seed_by_code: Dict[str, Dict[str, Any]] = {}
+    for seed_row in sys_menu_permission_table.seed_data:
+        permission_code = seed_row.get("permission_str")
+        if isinstance(permission_code, str) and permission_code.strip():
+            permission_seed_by_code[permission_code] = seed_row
+
+    next_permission_id = _next_seed_id(sys_menu_permission_table.seed_data)
+    for permission_code in _collect_rbac_permissions(tables, relations):
+        if permission_code in permission_seed_by_code:
+            continue
+        permission_seed = {
+            "id": next_permission_id,
+            "parent_id": 0,
+            "name": permission_code,
+            "permission_str": permission_code,
+            "type": 2,
+            "path": None,
+        }
+        sys_menu_permission_table.seed_data.append(permission_seed)
+        permission_seed_by_code[permission_code] = permission_seed
+        next_permission_id += 1
+
+    existing_role_permission_pairs = {
+        (int(seed_row["role_id"]), int(seed_row["permission_id"]))
+        for seed_row in sys_role_permission_table.seed_data
+        if seed_row.get("role_id") is not None
+        and seed_row.get("permission_id") is not None
+    }
+    next_role_permission_id = _next_seed_id(sys_role_permission_table.seed_data)
+    for permission_code in _collect_rbac_permissions(tables, relations):
+        permission_id = int(permission_seed_by_code[permission_code]["id"])
+        mapping = (super_admin_role_id, permission_id)
+        if mapping in existing_role_permission_pairs:
+            continue
+        sys_role_permission_table.seed_data.append(
+            {
+                "id": next_role_permission_id,
+                "role_id": super_admin_role_id,
+                "permission_id": permission_id,
+            }
+        )
+        existing_role_permission_pairs.add(mapping)
+        next_role_permission_id += 1
+
+
+def _dictionary_seed_value(value: Any, value_type: str) -> str:
+    normalized = _normalize_dictionary_value(value, value_type)
+    if value_type == "boolean":
+        return "true" if normalized else "false"
+    return str(normalized)
+
+
+def _inject_dictionary_tables(payload: Dict[str, Any], security_enabled: bool) -> None:
+    existing_tables = {t["name"] for t in payload.get("tables", [])}
+    dictionary_tables = []
+
+    if "sys_dict_type" not in existing_tables:
+        table_cfg = {
+                "name": "sys_dict_type",
+                "comment": "Dictionary Type",
+                "entityName": "SysDictType",
+                "primaryKey": "id",
+                "queryableFields": [
+                    {"name": "dict_key", "operator": "LIKE"},
+                    {"name": "dict_name", "operator": "LIKE"},
+                ],
+                "sortableFields": ["dict_key", "created_at"],
+                "frontend": {
+                    "menuTitle": "Dictionary Types",
+                    "menuIcon": "el-icon-collection-tag",
+                },
+                "fields": [
+                    {"name": "id", "type": "bigint", "nullable": False, "idType": "AUTO", "comment": "ID"},
+                    {"name": "dict_key", "type": "varchar(64)", "nullable": False, "unique": True, "comment": "Dictionary Key"},
+                    {"name": "dict_name", "type": "varchar(128)", "nullable": False, "comment": "Dictionary Name"},
+                    {"name": "value_type", "type": "varchar(32)", "nullable": False, "comment": "Dictionary Value Type"},
+                    {"name": "created_at", "type": "datetime", "nullable": False, "autoFill": "INSERT", "comment": "Created Time"},
+                ],
+            }
+        if security_enabled:
+            table_cfg["auth"] = {
+                "permissions": {
+                    "query": "system:dict-type:view",
+                    "create": "system:dict-type:add",
+                    "update": "system:dict-type:edit",
+                    "delete": "system:dict-type:delete",
+                }
+            }
+        dictionary_tables.append(table_cfg)
+
+    if "sys_dict_item" not in existing_tables:
+        table_cfg = {
+                "name": "sys_dict_item",
+                "comment": "Dictionary Item",
+                "entityName": "SysDictItem",
+                "primaryKey": "id",
+                "queryableFields": [
+                    {"name": "dict_type_id", "operator": "EQ"},
+                    {"name": "item_label", "operator": "LIKE"},
+                ],
+                "sortableFields": ["dict_type_id", "sort", "created_at"],
+                "frontend": {
+                    "menuTitle": "Dictionary Items",
+                    "menuIcon": "el-icon-tickets",
+                },
+                "foreignKeys": [
+                    {
+                        "columns": ["dict_type_id"],
+                        "refTable": "sys_dict_type",
+                        "refColumns": ["id"],
+                    }
+                ],
+                "fields": [
+                    {"name": "id", "type": "bigint", "nullable": False, "idType": "AUTO", "comment": "ID"},
+                    {"name": "dict_type_id", "type": "bigint", "nullable": False, "comment": "Dictionary Type ID"},
+                    {"name": "item_label", "type": "varchar(128)", "nullable": False, "comment": "Dictionary Item Label"},
+                    {"name": "item_value", "type": "varchar(128)", "nullable": False, "comment": "Dictionary Item Value"},
+                    {"name": "sort", "type": "int", "nullable": False, "comment": "Sort Order"},
+                    {"name": "enabled", "type": "tinyint(1)", "nullable": False, "comment": "Enabled Status"},
+                    {"name": "created_at", "type": "datetime", "nullable": False, "autoFill": "INSERT", "comment": "Created Time"},
+                ],
+            }
+        if security_enabled:
+            table_cfg["auth"] = {
+                "permissions": {
+                    "query": "system:dict-item:view",
+                    "create": "system:dict-item:add",
+                    "update": "system:dict-item:edit",
+                    "delete": "system:dict-item:delete",
+                }
+            }
+        dictionary_tables.append(table_cfg)
+
+    payload["tables"] = dictionary_tables + payload.get("tables", [])
+
+
+def _ensure_dictionary_seed_data(
+    tables: List[TableIR], dictionaries: List[DictionaryIR]
+) -> None:
+    if not dictionaries:
+        return
+
+    table_by_name = {table.name: table for table in tables}
+    if "sys_dict_type" not in table_by_name or "sys_dict_item" not in table_by_name:
+        return
+
+    dict_type_table = table_by_name["sys_dict_type"]
+    dict_item_table = table_by_name["sys_dict_item"]
+
+    type_seed_by_key: Dict[str, Dict[str, Any]] = {}
+    for seed_row in dict_type_table.seed_data:
+        dict_key = seed_row.get("dict_key")
+        if isinstance(dict_key, str) and dict_key.strip():
+            type_seed_by_key[dict_key] = seed_row
+
+    next_type_id = _next_seed_id(dict_type_table.seed_data)
+    for dictionary in dictionaries:
+        if dictionary.key in type_seed_by_key:
+            seed_row = type_seed_by_key[dictionary.key]
+            seed_row["dict_name"] = dictionary.name
+            seed_row["value_type"] = dictionary.value_type
+            continue
+        seed_row = {
+            "id": next_type_id,
+            "dict_key": dictionary.key,
+            "dict_name": dictionary.name,
+            "value_type": dictionary.value_type,
+            "created_at": "2024-01-01 00:00:00",
+        }
+        dict_type_table.seed_data.append(seed_row)
+        type_seed_by_key[dictionary.key] = seed_row
+        next_type_id += 1
+
+    existing_item_keys = {
+        (
+            int(seed_row["dict_type_id"]),
+            str(seed_row["item_value"]),
+        )
+        for seed_row in dict_item_table.seed_data
+        if seed_row.get("dict_type_id") is not None and seed_row.get("item_value") is not None
+    }
+    next_item_id = _next_seed_id(dict_item_table.seed_data)
+    for dictionary in dictionaries:
+        dict_type_id = int(type_seed_by_key[dictionary.key]["id"])
+        for item in dictionary.items:
+            item_value = _dictionary_seed_value(item.value, dictionary.value_type)
+            dedupe_key = (dict_type_id, item_value)
+            if dedupe_key in existing_item_keys:
+                continue
+            dict_item_table.seed_data.append(
+                {
+                    "id": next_item_id,
+                    "dict_type_id": dict_type_id,
+                    "item_label": item.label,
+                    "item_value": item_value,
+                    "sort": item.sort,
+                    "enabled": item.enabled,
+                    "created_at": "2024-01-01 00:00:00",
+                }
+            )
+            existing_item_keys.add(dedupe_key)
+            next_item_id += 1
 
 
 def parse_config(payload: Dict[str, Any]) -> ProjectIR:
@@ -70,13 +530,29 @@ def parse_config(payload: Dict[str, Any]) -> ProjectIR:
     backend_cfg = payload.get("backend", {})
     frontend_cfg = payload.get("frontend", {})
     global_cfg = payload["global"]
+    dictionaries_ir = _parse_dictionaries(payload, issues)
+    dictionary_by_key = {item.key: item for item in dictionaries_ir}
 
     security_cfg = payload.get("security", {})
     jwt_cfg = security_cfg.get("jwt", {})
     rbac_cfg = security_cfg.get("rbac", {})
     
+    security_enabled = bool(security_cfg.get("enabled", False))
+    default_roles_input = rbac_cfg.get("defaultRoles")
+    if default_roles_input is None and security_enabled:
+        default_roles_input = ["ROLE_USER"]
+    elif default_roles_input is None:
+        default_roles_input = []
+    normalized_default_roles = _normalize_role_list(
+        list(default_roles_input),
+        "security.rbac.defaultRoles",
+        issues,
+    )
+    if security_enabled and not normalized_default_roles:
+        normalized_default_roles = ["ROLE_USER"]
+
     security_ir = SecurityIR(
-        enabled=bool(security_cfg.get("enabled", False)),
+        enabled=security_enabled,
         type=str(security_cfg.get("type", "jwt")),
         jwt=JwtConfigIR(
             secret=str(jwt_cfg.get("secret", "default-secret-key-must-be-at-least-256-bits")),
@@ -86,13 +562,20 @@ def parse_config(payload: Dict[str, Any]) -> ProjectIR:
         ),
         rbac=RbacConfigIR(
             strategy=str(rbac_cfg.get("strategy", "role_permission")),
-            super_admin_role=str(rbac_cfg.get("superAdminRole", "ROLE_ADMIN")),
-            default_roles=list(rbac_cfg.get("defaultRoles", [])),
+            super_admin_role=_normalize_required_role(
+                rbac_cfg.get("superAdminRole", "ROLE_ADMIN"),
+                "security.rbac.superAdminRole",
+                issues,
+                "ROLE_ADMIN",
+            ),
+            default_roles=normalized_default_roles,
         )
     )
 
     if security_ir.enabled:
-        _inject_rbac_tables(payload, rbac_cfg)
+        _inject_rbac_tables(payload, security_ir.rbac)
+    if dictionaries_ir:
+        _inject_dictionary_tables(payload, security_ir.enabled)
 
     if not _is_valid_package(project_cfg["basePackage"]):
         issues.append(
@@ -157,6 +640,38 @@ def parse_config(payload: Dict[str, Any]) -> ProjectIR:
                 logic_delete_count += 1
 
             field_frontend_cfg = field_cfg.get("frontend", {})
+            dict_key = field_cfg.get("dictKey")
+            dict_value_type = None
+            if dict_key is not None:
+                dict_key = str(dict_key).strip()
+                dictionary = dictionary_by_key.get(dict_key)
+                if dictionary is None:
+                    issues.append(
+                        ParseIssue(
+                            path=f"{field_path}.dictKey",
+                            message=f"unknown dictionary '{dict_key}'",
+                        )
+                    )
+                else:
+                    dict_value_type = dictionary.value_type
+                    expected_java_type = DICT_VALUE_TYPE_TO_JAVA[dictionary.value_type]
+                    if java_type != expected_java_type:
+                        issues.append(
+                            ParseIssue(
+                                path=f"{field_path}.dictKey",
+                                message=(
+                                    f"dictionary '{dict_key}' expects Java type "
+                                    f"'{expected_java_type}', got '{java_type}'"
+                                ),
+                            )
+                        )
+                if "options" in field_frontend_cfg:
+                    issues.append(
+                        ParseIssue(
+                            path=f"{field_path}.frontend.options",
+                            message="cannot be used together with dictKey",
+                        )
+                    )
             field_frontend = FieldFrontendIR(
                 label=field_frontend_cfg.get("label", ""),
                 component=field_frontend_cfg.get("component", ""),
@@ -184,6 +699,8 @@ def parse_config(payload: Dict[str, Any]) -> ProjectIR:
                 auto_fill=field_cfg.get("autoFill"),
                 id_type=field_cfg.get("idType"),
                 is_primary=False,
+                dict_key=dict_key if dict_key else None,
+                dict_value_type=dict_value_type,
                 frontend=field_frontend,
             )
             fields.append(field_ir)
@@ -278,7 +795,11 @@ def parse_config(payload: Dict[str, Any]) -> ProjectIR:
             permissions_cfg = auth_cfg.get("permissions", {})
             table_auth_ir = TableAuthIR(
                 enabled=bool(auth_cfg.get("enabled", True)),
-                roles=list(auth_cfg.get("roles", [])),
+                roles=_normalize_role_list(
+                    list(auth_cfg.get("roles", [])),
+                    f"{table_path}.auth.roles",
+                    issues,
+                ),
                 permissions=PermissionIR(
                     query=permissions_cfg.get("query"),
                     create=permissions_cfg.get("create"),
@@ -798,11 +1319,15 @@ def parse_config(payload: Dict[str, Any]) -> ProjectIR:
         if auth_cfg is not None:
             relation_auth_ir = TableAuthIR(
                 enabled=bool(auth_cfg.get("enabled", True)),
-                roles=list(auth_cfg.get("roles", [])),
+                roles=_normalize_role_list(
+                    list(auth_cfg.get("roles", [])),
+                    f"{relation_path}.auth.roles",
+                    issues,
+                ),
                 permissions=PermissionIR()
             )
         elif security_ir.enabled:
-             relation_auth_ir = TableAuthIR(
+            relation_auth_ir = TableAuthIR(
                 enabled=True,
                 roles=[],
                 permissions=PermissionIR(query=f"{relation_name}:view")
@@ -833,6 +1358,11 @@ def parse_config(payload: Dict[str, Any]) -> ProjectIR:
             auth=relation_auth_ir,
         )
         relations.append(relation_ir)
+
+    if security_ir.enabled:
+        _ensure_rbac_seed_data(tables, relations, security_ir.rbac)
+    if dictionaries_ir:
+        _ensure_dictionary_seed_data(tables, dictionaries_ir)
 
     if issues:
         raise ConfigError(issues)
@@ -880,6 +1410,7 @@ def parse_config(payload: Dict[str, Any]) -> ProjectIR:
             backend_url=frontend_cfg.get("backendUrl", "http://127.0.0.1:8080"),
             dev_port=int(frontend_cfg.get("devPort", 8081)),
         ),
+        dictionaries=dictionaries_ir,
         tables=tables,
         relations=relations,
     )
@@ -931,7 +1462,7 @@ def _is_valid_java_identifier(name: str) -> bool:
     return re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", name) is not None
 
 
-def _inject_rbac_tables(payload: Dict[str, Any], rbac_config: Dict[str, Any]) -> None:
+def _inject_rbac_tables(payload: Dict[str, Any], rbac_config: RbacConfigIR) -> None:
     existing_tables = {t["name"] for t in payload.get("tables", [])}
     rbac_tables = []
     
@@ -952,7 +1483,7 @@ def _inject_rbac_tables(payload: Dict[str, Any], rbac_config: Dict[str, Any]) ->
                 {"name": "created_at", "type": "datetime", "nullable": False, "autoFill": "INSERT", "comment": "Created Time"}
             ],
             "seedData": [
-                {"id": 1, "username": "admin", "password": "$2a$10$7JB720yubVSZvUI0rEqK/.VqGOZTH.ulu33dHOiBE8ByOhJIrdAu2", "enabled": True, "created_at": "2024-01-01 00:00:00"}
+                {"id": 1, "username": "admin", "password": "$2y$10$6nO2SjLp7N7EoenOqL8bgOHwNHF9h3Gq8rivStyFnx/SnwbBSfcBa", "enabled": True, "created_at": "2024-01-01 00:00:00"}
             ]
         })
     if "sys_role" not in existing_tables:
@@ -969,7 +1500,7 @@ def _inject_rbac_tables(payload: Dict[str, Any], rbac_config: Dict[str, Any]) ->
                 {"name": "created_at", "type": "datetime", "nullable": False, "autoFill": "INSERT", "comment": "Created Time"}
             ],
             "seedData": [
-                {"id": 1, "role_name": "Administrator", "role_code": rbac_config.get("superAdminRole", "ROLE_ADMIN"), "created_at": "2024-01-01 00:00:00"}
+                {"id": 1, "role_name": "Administrator", "role_code": rbac_config.super_admin_role, "created_at": "2024-01-01 00:00:00"}
             ]
         })
     if "sys_user_role" not in existing_tables:

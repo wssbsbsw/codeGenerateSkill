@@ -19,6 +19,9 @@ class RendererTest(unittest.TestCase):
                 encoding="utf-8"
             )
         )
+        self.sample_security_payload = json.loads(
+            (root / "examples" / "sample_security.json").read_text(encoding="utf-8")
+        )
 
     def test_render_application_uses_env_placeholders(self) -> None:
         project = parse_config(self.sample_payload)
@@ -110,6 +113,22 @@ class RendererTest(unittest.TestCase):
         self.assertIn('strictInsertFill(metaObject, "createdAt"', handler)
         self.assertIn('strictInsertFill(metaObject, "updatedAt"', handler)
         self.assertIn('strictUpdateFill(metaObject, "updatedAt"', handler)
+
+    def test_render_tenant_config_ignores_system_tables(self) -> None:
+        payload = json.loads(json.dumps(self.sample_security_payload))
+        payload["global"]["tenant"] = {"enabled": True, "column": "tenant_id"}
+
+        project = parse_config(payload)
+        files = CodeRenderer().render_project(project)
+
+        config_java = files[
+            "backend/src/main/java/com/example/admin/config/MybatisPlusConfig.java"
+        ]
+
+        self.assertIn('"sys_user".equalsIgnoreCase(tableName)', config_java)
+        self.assertIn('"sys_role".equalsIgnoreCase(tableName)', config_java)
+        self.assertIn('"sys_dict_type".equalsIgnoreCase(tableName)', config_java)
+        self.assertIn('"sys_log".equalsIgnoreCase(tableName)', config_java)
 
     def test_render_service_and_relation_mapper_support_extended_operators_and_sorting(
         self,
@@ -216,22 +235,21 @@ class RendererTest(unittest.TestCase):
         self.assertIn("return Result.error(400, \"File is empty\");", file_controller_java)
 
     def test_render_security_user_details_handles_integer_enabled_flag(self) -> None:
-        root = Path(__file__).resolve().parents[1]
-        payload = json.loads(
-            (root / "examples" / "sample_security.json").read_text(encoding="utf-8")
-        )
-
-        project = parse_config(payload)
+        project = parse_config(self.sample_security_payload)
         files = CodeRenderer().render_project(project)
 
         user_details = files[
             "backend/src/main/java/com/example/admin/security/UserDetailsServiceImpl.java"
         ]
+        init_sql = files["backend/src/main/resources/init.sql"]
 
         self.assertIn("sysUser.getEnabled() != null && sysUser.getEnabled() != 0", user_details)
         self.assertIn("registerUser", user_details)
         self.assertIn("passwordEncoder.encode", user_details)
-        self.assertIn("ROLE_USER", user_details)
+        self.assertIn('DEFAULT_ROLE_CODES = Arrays.asList("ROLE_USER")', user_details)
+        self.assertIn('authority = "ROLE_" + authority;', user_details)
+        self.assertIn('Missing default registration role: ', user_details)
+        self.assertIn("$2y$10$6nO2SjLp7N7EoenOqL8bgOHwNHF9h3Gq8rivStyFnx/SnwbBSfcBa", init_sql)
 
         auth_controller = files[
             "backend/src/main/java/com/example/admin/security/AuthController.java"
@@ -244,6 +262,181 @@ class RendererTest(unittest.TestCase):
             "backend/src/main/java/com/example/admin/security/WebSecurityConfig.java"
         ]
         self.assertIn("/auth/register", web_security)
+
+    def test_render_security_swagger_and_rbac_bootstrap_are_aligned(self) -> None:
+        payload = json.loads(json.dumps(self.sample_security_payload))
+        payload["global"]["enableSwagger"] = True
+
+        project = parse_config(payload)
+        files = CodeRenderer().render_project(project)
+
+        init_sql = files["backend/src/main/resources/init.sql"]
+        application_yml = files["backend/src/main/resources/application.yml"]
+        web_security = files[
+            "backend/src/main/java/com/example/admin/security/WebSecurityConfig.java"
+        ]
+        controller_java = files[
+            "backend/src/main/java/com/example/admin/controller/ProductController.java"
+        ]
+        pom_xml = files["backend/pom.xml"]
+
+        self.assertIn("matching-strategy: ant_path_matcher", application_yml)
+        self.assertIn('"/doc.html"', web_security)
+        self.assertIn('"/v2/api-docs"', web_security)
+        self.assertIn("knife4j-spring-boot-starter", pom_xml)
+        self.assertIn("hasAnyRole('ADMIN', 'MANAGER')", controller_java)
+        self.assertIn('@PostMapping("/import")', controller_java)
+        self.assertEqual(controller_java.count("@PreAuthorize(\"hasAnyRole('ADMIN', 'MANAGER')\")"), 6)
+        self.assertIn("'ROLE_ADMIN'", init_sql)
+        self.assertIn("'ROLE_USER'", init_sql)
+        self.assertIn("'product:force_delete'", init_sql)
+
+    def test_render_security_frontend_uses_me_for_route_menu_and_button_permissions(
+        self,
+    ) -> None:
+        payload = json.loads(json.dumps(self.sample_security_payload))
+        payload["frontend"] = {
+            "enabled": True,
+            "framework": "vue2",
+            "locale": "en-US",
+            "outputDir": "frontend",
+            "appTitle": "Secure Admin",
+            "backendUrl": "http://127.0.0.1:8080",
+            "devPort": 8081,
+        }
+
+        project = parse_config(payload)
+        files = CodeRenderer().render_project(project)
+
+        router_js = files["frontend/src/router/index.js"]
+        layout_vue = files["frontend/src/layout/Layout.vue"]
+        dashboard_vue = files["frontend/src/views/dashboard/index.vue"]
+        request_js = files["frontend/src/utils/request.js"]
+        auth_api = files["frontend/src/api/auth.js"]
+        auth_util = files["frontend/src/utils/auth.js"]
+        login_vue = files["frontend/src/views/login/index.vue"]
+        products_view = files["frontend/src/views/products/index.vue"]
+
+        self.assertIn("ensureCurrentUser", router_js)
+        self.assertIn('"roles": ["ROLE_ADMIN", "ROLE_MANAGER"]', router_js)
+        self.assertIn('"permissions": ["product:force_delete"]', products_view)
+        self.assertIn("findFirstAccessiblePath", router_js)
+        self.assertIn("filteredMenuGroups", layout_vue)
+        self.assertIn("hasAccess(item.auth)", layout_vue)
+        self.assertIn("visibleQuickLinks", dashboard_vue)
+        self.assertIn("hasAccess(page.route_auth)", dashboard_vue)
+        self.assertIn("fetchAuthMe", auth_api)
+        self.assertIn("ensureCurrentUser", auth_util)
+        self.assertIn("hasAccess(rule, currentUser = getCurrentUser())", auth_util)
+        self.assertIn("window.location.hash = \"#/login\"", request_js)
+        self.assertIn("setToken(token)", login_vue)
+        self.assertIn("const redirectPath = this.$route.query.redirect || '/'", login_vue)
+        self.assertIn("Secure Admin Login", login_vue)
+        self.assertIn("const actionAuth =", products_view)
+        self.assertIn("v-if=\"canCreate\"", products_view)
+        self.assertIn("v-if=\"canUpdate\"", products_view)
+        self.assertIn("v-if=\"canDelete\"", products_view)
+        self.assertIn("v-if=\"canSave\"", products_view)
+        self.assertIn("this.$message.error(\"You do not have permission to perform this action\")", products_view)
+
+    def test_render_dictionaries_generate_backend_frontend_and_excel_mapping(self) -> None:
+        payload = json.loads(json.dumps(self.sample_payload))
+        payload["security"] = {
+            "enabled": True,
+            "jwt": {"secret": "my-super-secret-key-that-is-very-long"},
+        }
+        payload["frontend"] = {
+            "enabled": True,
+            "framework": "vue2",
+            "locale": "en-US",
+            "outputDir": "frontend",
+            "appTitle": "Demo Admin",
+            "backendUrl": "http://127.0.0.1:8080",
+            "devPort": 8081,
+        }
+        payload["dictionaries"] = [
+            {
+                "key": "user_status",
+                "name": "User Status",
+                "valueType": "integer",
+                "items": [
+                    {"label": "Disabled", "value": 0, "sort": 10, "enabled": True},
+                    {"label": "Enabled", "value": 1, "sort": 20, "enabled": True},
+                ],
+            }
+        ]
+        payload["tables"][0]["fields"][2]["dictKey"] = "user_status"
+        payload["relations"][0]["select"].append(
+            {"table": "users", "field": "status", "alias": "userStatus"}
+        )
+        payload["relations"][0]["filters"].append(
+            {"table": "users", "field": "status", "operator": "EQ", "param": "status"}
+        )
+
+        project = parse_config(payload)
+        files = CodeRenderer().render_project(project)
+
+        init_sql = files["backend/src/main/resources/init.sql"]
+        user_export_dto = files[
+            "backend/src/main/java/com/example/demo/dto/UserExportDto.java"
+        ]
+        user_controller = files[
+            "backend/src/main/java/com/example/demo/controller/UserController.java"
+        ]
+        dictionary_controller = files[
+            "backend/src/main/java/com/example/demo/controller/DictionaryController.java"
+        ]
+        dictionary_service = files[
+            "backend/src/main/java/com/example/demo/service/impl/DictionaryServiceImpl.java"
+        ]
+        users_view = files["frontend/src/views/users/index.vue"]
+        relation_view = files["frontend/src/views/relations/order-user/index.vue"]
+        dictionary_util = files["frontend/src/utils/dictionary.js"]
+        dictionary_api = files["frontend/src/api/dictionary.js"]
+
+        self.assertIn("CREATE TABLE IF NOT EXISTS `sys_dict_type`", init_sql)
+        self.assertIn("INSERT INTO `sys_dict_type`", init_sql)
+        self.assertIn("user_status", init_sql)
+        self.assertIn("system:dict-type:view", init_sql)
+        self.assertIn("system:dict-item:view", init_sql)
+        self.assertIn("private String status;", user_export_dto)
+        self.assertIn('dictionaryService.resolveLabel("user_status"', user_controller)
+        self.assertIn('dictionaryService.resolveValue("user_status"', user_controller)
+        self.assertIn('@GetMapping("/{dictKey}/items")', dictionary_controller)
+        self.assertIn("listEnabledOptions", dictionary_service)
+        self.assertIn("dictionaryOptions['user_status']", users_view)
+        self.assertIn('import { loadDictionaryOptions, formatDictionaryValue } from "@/utils/dictionary"', users_view)
+        self.assertIn("dictionaryOptions", relation_view)
+        self.assertIn("fetchDictionaryItems", dictionary_api)
+        self.assertIn("formatDictionaryValue", dictionary_util)
+
+    def test_render_dictionaries_without_security_do_not_emit_security_imports(self) -> None:
+        payload = json.loads(json.dumps(self.sample_payload))
+        payload["dictionaries"] = [
+            {
+                "key": "user_status",
+                "name": "User Status",
+                "valueType": "integer",
+                "items": [
+                    {"label": "Disabled", "value": 0},
+                    {"label": "Enabled", "value": 1},
+                ],
+            }
+        ]
+        payload["tables"][0]["fields"][2]["dictKey"] = "user_status"
+
+        project = parse_config(payload)
+        files = CodeRenderer().render_project(project)
+
+        dict_type_controller = files[
+            "backend/src/main/java/com/example/demo/controller/SysDictTypeController.java"
+        ]
+        system_log_aspect = files[
+            "backend/src/main/java/com/example/demo/common/aspect/SystemLogAspect.java"
+        ]
+
+        self.assertNotIn("PreAuthorize", dict_type_controller)
+        self.assertNotIn("SecurityContextHolder", system_log_aspect)
 
     def test_render_vue2_frontend_project(self) -> None:
         payload = json.loads(json.dumps(self.sample_payload))
@@ -379,10 +572,11 @@ class RendererTest(unittest.TestCase):
         self.assertIn('Vue.use(ElementUI, { size: "small", locale })', main_js)
         self.assertIn('<html lang="zh-CN">', public_html)
         self.assertIn("此页面需要启用 JavaScript 才能运行。", public_html)
-        self.assertIn('meta: { title: "仪表盘" }', router_js)
+        self.assertIn('meta: { title: "仪表盘", auth: { enabled: false, roles: [], permissions: [] } }', router_js)
         self.assertIn("仪表盘", layout_vue)
-        self.assertIn("数据管理", layout_vue)
-        self.assertIn("关联视图", layout_vue)
+        self.assertIn("filteredMenuGroups", layout_vue)
+        self.assertIn('"title": "\\u6570\\u636e\\u7ba1\\u7406"', layout_vue)
+        self.assertIn('"title": "\\u5173\\u8054\\u89c6\\u56fe"', layout_vue)
         self.assertIn("Vue2 管理工作台", layout_vue)
         self.assertIn("快速导航", dashboard_vue)
         self.assertIn("打开已生成的数据模块与关联查询页面。", dashboard_vue)

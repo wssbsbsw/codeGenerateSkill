@@ -11,7 +11,7 @@
           <h3>{{ page.title }}</h3>
           <p>{{ messages.table_toolbar_description }}</p>
         </div>
-        <el-button type="primary" icon="el-icon-plus" @click="openCreate">{{ messages.button_new }}</el-button>
+        <el-button v-if="canCreate" type="primary" icon="el-icon-plus" @click="openCreate">{{ messages.button_new }}</el-button>
       </div>
 
       <el-form :inline="true" :model="queryForm" class="query-form">
@@ -22,8 +22,9 @@
             placeholder="{{ field.placeholder }}"
           />
 {% elif field.kind == "select" %}          <el-select v-model="queryForm.{{ field.property_name }}" clearable placeholder="{{ field.placeholder }}">
-{% for option in field.options %}            <el-option :value="{{ option.value|tojson }}" label="{{ option.label }}" />
-{% endfor %}          </el-select>
+{% if field.dict_key %}{% raw %}            <el-option v-for="option in dictionaryOptions['{% endraw %}{{ field.dict_key }}{% raw %}'] || []" :key="String(option.value)" :value="option.value" :label="option.label" />
+{% endraw %}{% else %}{% for option in field.options %}            <el-option :value="{{ option.value|tojson }}" label="{{ option.label }}" />
+{% endfor %}{% endif %}          </el-select>
 {% elif field.kind == "number" %}          <el-input-number
             v-model="queryForm.{{ field.property_name }}"
             :step="{{ field.step }}"
@@ -71,7 +72,8 @@
 {% if column.sortable %}          sortable="custom"
 {% endif %}        >
           <template slot-scope="scope">
-{% if column.formatter == "datetime" %}            <span v-text="formatDateTime(scope.row.{{ column.property_name }})"></span>
+{% if column.dict_key %}            <span v-text="dictionaryLabel('{{ column.dict_key }}', scope.row.{{ column.property_name }})"></span>
+{% elif column.formatter == "datetime" %}            <span v-text="formatDateTime(scope.row.{{ column.property_name }})"></span>
 {% elif column.formatter == "date" %}            <span v-text="formatDate(scope.row.{{ column.property_name }})"></span>
 {% elif column.formatter == "boolean" %}            <span v-text="formatBoolean(scope.row.{{ column.property_name }})"></span>
 {% else %}            <span v-text="formatValue(scope.row.{{ column.property_name }})"></span>
@@ -80,8 +82,8 @@
 {% endfor %}        <el-table-column label="{{ messages.table_actions }}" width="220" fixed="right">
           <template slot-scope="scope">
             <el-button type="text" @click="openDetail(scope.row)">{{ messages.button_detail }}</el-button>
-            <el-button type="text" @click="openEdit(scope.row)">{{ messages.button_edit }}</el-button>
-            <el-button type="text" style="color: #ef4444" @click="handleDelete(scope.row)">{{ messages.button_delete }}</el-button>
+            <el-button v-if="canUpdate" type="text" @click="openEdit(scope.row)">{{ messages.button_edit }}</el-button>
+            <el-button v-if="canDelete" type="text" style="color: #ef4444" @click="handleDelete(scope.row)">{{ messages.button_delete }}</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -106,8 +108,9 @@
 {% if field.kind == "text" %}          <el-input v-model="formData.{{ field.property_name }}" maxlength="{{ field.max_length }}" show-word-limit placeholder="{{ field.placeholder }}" />
 {% elif field.kind == "textarea" %}          <el-input v-model="formData.{{ field.property_name }}" type="textarea" :rows="4" maxlength="{{ field.max_length }}" show-word-limit placeholder="{{ field.placeholder }}" />
 {% elif field.kind == "select" %}          <el-select v-model="formData.{{ field.property_name }}" clearable placeholder="{{ field.placeholder }}">
-{% for option in field.options %}            <el-option :value="{{ option.value|tojson }}" label="{{ option.label }}" />
-{% endfor %}          </el-select>
+{% if field.dict_key %}{% raw %}            <el-option v-for="option in dictionaryOptions['{% endraw %}{{ field.dict_key }}{% raw %}'] || []" :key="String(option.value)" :value="option.value" :label="option.label" />
+{% endraw %}{% else %}{% for option in field.options %}            <el-option :value="{{ option.value|tojson }}" label="{{ option.label }}" />
+{% endfor %}{% endif %}          </el-select>
 {% elif field.kind == "number" %}          <el-input-number v-model="formData.{{ field.property_name }}" :step="{{ field.step }}" :controls-position="right" />
 {% elif field.kind in ["date", "datetime"] %}          <el-date-picker v-model="formData.{{ field.property_name }}" type="{{ field.picker_type }}" value-format="{{ field.value_format }}" placeholder="{{ field.placeholder }}" />
 {% elif field.kind == "switch" %}          <el-switch v-model="formData.{{ field.property_name }}" />
@@ -128,14 +131,15 @@
 {% endfor %}      </el-form>
       <span slot="footer">
         <el-button @click="dialogVisible = false">{{ messages.button_cancel }}</el-button>
-        <el-button type="primary" @click="submitForm">{{ messages.button_save }}</el-button>
+        <el-button v-if="canSave" type="primary" @click="submitForm">{{ messages.button_save }}</el-button>
       </span>
     </el-dialog>
 
     <el-drawer :visible.sync="detailVisible" title="{{ messages.dialog_detail_title }}" size="40%">
       <el-descriptions :column="1" border>
 {% for field in page.detail_fields %}        <el-descriptions-item label="{{ field.label }}">
-{% if field.formatter == "datetime" %}          <span class="detail-value" v-text="formatDateTime(detailData.{{ field.property_name }})"></span>
+{% if field.dict_key %}          <span class="detail-value" v-text="dictionaryLabel('{{ field.dict_key }}', detailData.{{ field.property_name }})"></span>
+{% elif field.formatter == "datetime" %}          <span class="detail-value" v-text="formatDateTime(detailData.{{ field.property_name }})"></span>
 {% elif field.formatter == "date" %}          <span class="detail-value" v-text="formatDate(detailData.{{ field.property_name }})"></span>
 {% elif field.formatter == "boolean" %}          <span class="detail-value" v-text="formatBoolean(detailData.{{ field.property_name }})"></span>
 {% else %}          <span class="detail-value" v-text="formatValue(detailData.{{ field.property_name }})"></span>
@@ -154,10 +158,17 @@ import {
   {{ page.api_function_names['delete'] }}
 } from "@/api/{{ page.resource_name }}"
 import { formatBoolean, formatDate, formatDateTime, formatValue } from "@/utils/format"
+{% if project.security.enabled %}import { hasAccess } from "@/utils/auth"
+{% endif %}
+{% if page.has_dictionaries %}import { loadDictionaryOptions, formatDictionaryValue } from "@/utils/dictionary"
+{% endif %}
 
 const createEmptyForm = () => ({
 {% for field in page.form_fields %}  {{ field.property_name }}: {{ field.default_js }}{% if not loop.last %},{% endif %}
 {% endfor %}})
+{% if project.security.enabled %}
+const actionAuth = {{ page.action_auth|tojson }}
+{% endif %}
 
 const createDefaultQuery = () => ({
   page: 1,
@@ -173,6 +184,35 @@ const sortFieldMap = {
 
 export default {
   name: "{{ page.route_name }}",
+  computed: {
+{% if project.security.enabled %}
+    canCreate() {
+      return hasAccess(actionAuth.create)
+    },
+    canUpdate() {
+      return hasAccess(actionAuth.update)
+    },
+    canDelete() {
+      return hasAccess(actionAuth.delete)
+    },
+    canSave() {
+      return this.dialogMode === "create" ? this.canCreate : this.canUpdate
+    },
+{% else %}
+    canCreate() {
+      return true
+    },
+    canUpdate() {
+      return true
+    },
+    canDelete() {
+      return true
+    },
+    canSave() {
+      return true
+    },
+{% endif %}
+  },
   data() {
     return {
       loading: false,
@@ -186,6 +226,9 @@ export default {
       formData: createEmptyForm(),
       detailVisible: false,
       detailData: {},
+{% if page.has_dictionaries %}
+      dictionaryOptions: {},
+{% endif %}
       uploadUrl: (process.env.VUE_APP_BASE_API || "{{ project.api_prefix }}") + "/common/upload",
       uploadHeaders: {
 {% if project.security.enabled %}
@@ -198,13 +241,32 @@ export default {
     }
   },
   created() {
-    this.loadData()
+{% if page.has_dictionaries %}    this.initPage()
+{% else %}    this.loadData()
+{% endif %}
   },
   methods: {
     formatBoolean,
     formatDate,
     formatDateTime,
     formatValue,
+{% if page.has_dictionaries %}
+    async initPage() {
+      await this.loadDictionaries()
+      this.loadData()
+    },
+    async loadDictionaries() {
+      const dictKeys = [{% for key in page.dictionary_keys %}"{{ key }}"{% if not loop.last %}, {% endif %}{% endfor %}]
+      const entries = await Promise.all(dictKeys.map(async key => [key, await loadDictionaryOptions(key)]))
+      this.dictionaryOptions = entries.reduce((acc, entry) => {
+        acc[entry[0]] = entry[1]
+        return acc
+      }, {})
+    },
+    dictionaryLabel(dictKey, value) {
+      return formatDictionaryValue(this.dictionaryOptions[dictKey] || [], value)
+    },
+{% endif %}
     handleUploadSuccess(res, fieldName) {
       if (res.code === 0) {
         this.formData[fieldName] = res.data;
@@ -257,6 +319,11 @@ export default {
 {% else %}      return { prop, order }
 {% endif %}    },
     openCreate() {
+{% if project.security.enabled %}      if (!this.canCreate) {
+        this.$message.error("{{ messages.request_forbidden }}")
+        return
+      }
+{% endif %}
       this.dialogMode = "create"
       this.dialogTitle = "{{ messages.dialog_new_title|replace("{title}", page.title) }}"
       this.currentId = null
@@ -267,6 +334,11 @@ export default {
       })
     },
     async openEdit(row) {
+{% if project.security.enabled %}      if (!this.canUpdate) {
+        this.$message.error("{{ messages.request_forbidden }}")
+        return
+      }
+{% endif %}
       const data = await {{ page.api_function_names['fetch_one'] }}(row.{{ page.primary_key_property }})
       this.dialogMode = "edit"
       this.dialogTitle = "{{ messages.dialog_edit_title|replace("{title}", page.title) }}"
@@ -287,6 +359,11 @@ export default {
 {% endfor %}      }
     },
     async submitForm() {
+{% if project.security.enabled %}      if (!this.canSave) {
+        this.$message.error("{{ messages.request_forbidden }}")
+        return
+      }
+{% endif %}
       try {
         await this.$refs.formRef.validate()
       } catch (e) {
@@ -304,6 +381,11 @@ export default {
       this.loadData()
     },
     async handleDelete(row) {
+{% if project.security.enabled %}      if (!this.canDelete) {
+        this.$message.error("{{ messages.request_forbidden }}")
+        return
+      }
+{% endif %}
       await this.$confirm("{{ messages.confirm_delete }}", "{{ messages.confirm_warning_title }}", {
         type: "warning"
       })

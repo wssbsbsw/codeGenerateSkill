@@ -1,0 +1,21 @@
+import { fetchDictionaryItems } from "@/api/dictionary"
+
+const dictionaryCache = {}
+
+export async function loadDictionaryOptions(dictKey) {
+  if (!dictKey) {
+    return []
+  }
+  if (!dictionaryCache[dictKey]) {
+    dictionaryCache[dictKey] = fetchDictionaryItems(dictKey).then(items => items || [])
+  }
+  return dictionaryCache[dictKey]
+}
+
+export function formatDictionaryValue(options, value) {
+  if (!options || !options.length) {
+    return value
+  }
+  const match = options.find(item => item.value === value || String(item.value) === String(value))
+  return match ? match.label : value
+}

@@ -104,6 +104,44 @@ SCHEMA_V1: Dict[str, Any] = {
                 },
             },
         },
+        "dictionaries": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "required": ["key", "name", "valueType", "items"],
+                "additionalProperties": False,
+                "properties": {
+                    "key": {"type": "string", "minLength": 1},
+                    "name": {"type": "string", "minLength": 1},
+                    "valueType": {
+                        "type": "string",
+                        "enum": ["string", "integer", "long", "boolean"],
+                    },
+                    "items": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "required": ["label", "value"],
+                            "additionalProperties": False,
+                            "properties": {
+                                "label": {"type": "string", "minLength": 1},
+                                "value": {
+                                    "type": [
+                                        "string",
+                                        "number",
+                                        "integer",
+                                        "boolean",
+                                        "null",
+                                    ]
+                                },
+                                "sort": {"type": "integer", "default": 0},
+                                "enabled": {"type": "boolean", "default": True},
+                            },
+                        },
+                    },
+                },
+            },
+        },
         "tables": {
             "type": "array",
             "minItems": 1,
@@ -362,6 +400,7 @@ SCHEMA_V1: Dict[str, Any] = {
                                     "type": "string",
                                     "enum": ["AUTO", "ASSIGN_ID", "INPUT"],
                                 },
+                                "dictKey": {"type": "string", "minLength": 1},
                             },
                         },
                     },

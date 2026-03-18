@@ -1,0 +1,53 @@
+{
+  "project": {
+    "groupId": "com.example",
+    "artifactId": "preset-light-auth",
+    "name": "preset-light-auth",
+    "basePackage": "com.example.lightauth",
+    "bootVersion": "2.7.18",
+    "javaVersion": 8
+  },
+  "datasource": {
+    "url": "jdbc:mysql://127.0.0.1:3306/preset_light_auth?useSSL=false&serverTimezone=UTC",
+    "username": "root",
+    "password": "root",
+    "driverClassName": "com.mysql.cj.jdbc.Driver"
+  },
+  "security": {
+    "enabled": true,
+    "jwt": {
+      "secret": "my-super-secret-key-that-is-very-long-and-secure"
+    },
+    "rbac": {
+      "defaultRoles": ["USER"]
+    }
+  },
+  "tables": [
+    {
+      "name": "profiles",
+      "comment": "用户档案",
+      "entityName": "Profile",
+      "primaryKey": "id",
+      "queryableFields": [
+        {"name": "nickname", "operator": "LIKE"}
+      ],
+      "sortableFields": ["id", "created_at"],
+      "auth": {
+        "roles": ["ADMIN", "USER"]
+      },
+      "fields": [
+        {"name": "id", "type": "bigint", "nullable": false, "idType": "AUTO", "comment": "主键"},
+        {"name": "nickname", "type": "varchar(64)", "nullable": false, "comment": "昵称"},
+        {"name": "bio", "type": "varchar(255)", "nullable": true, "comment": "简介"},
+        {"name": "created_at", "type": "datetime", "nullable": false, "autoFill": "INSERT", "comment": "创建时间"}
+      ]
+    }
+  ],
+  "relations": [],
+  "global": {
+    "apiPrefix": "/api",
+    "author": "codegen",
+    "dateTimeFormat": "yyyy-MM-dd HH:mm:ss",
+    "enableSwagger": false
+  }
+}

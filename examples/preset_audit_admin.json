@@ -1,0 +1,72 @@
+{
+  "project": {
+    "groupId": "com.example",
+    "artifactId": "preset-audit-admin",
+    "name": "preset-audit-admin",
+    "basePackage": "com.example.audit",
+    "bootVersion": "2.7.18",
+    "javaVersion": 8
+  },
+  "datasource": {
+    "url": "jdbc:mysql://127.0.0.1:3306/preset_audit_admin?useSSL=false&serverTimezone=UTC",
+    "username": "root",
+    "password": "root",
+    "driverClassName": "com.mysql.cj.jdbc.Driver"
+  },
+  "security": {
+    "enabled": true,
+    "jwt": {
+      "secret": "my-super-secret-key-that-is-very-long-and-secure"
+    }
+  },
+  "backend": {
+    "uploadDir": "uploads"
+  },
+  "frontend": {
+    "enabled": true,
+    "locale": "zh-CN",
+    "appTitle": "审计后台"
+  },
+  "dictionaries": [
+    {
+      "key": "audit_status",
+      "name": "审核状态",
+      "valueType": "integer",
+      "items": [
+        {"label": "待审核", "value": 0, "sort": 10, "enabled": true},
+        {"label": "已通过", "value": 1, "sort": 20, "enabled": true},
+        {"label": "已驳回", "value": 2, "sort": 30, "enabled": true}
+      ]
+    }
+  ],
+  "tables": [
+    {
+      "name": "audit_records",
+      "comment": "审计记录",
+      "entityName": "AuditRecord",
+      "primaryKey": "id",
+      "queryableFields": [
+        {"name": "record_title", "operator": "LIKE"},
+        "status"
+      ],
+      "sortableFields": ["id", "created_at"],
+      "frontend": {
+        "menuTitle": "审计记录"
+      },
+      "fields": [
+        {"name": "id", "type": "bigint", "nullable": false, "idType": "AUTO", "comment": "主键"},
+        {"name": "record_title", "type": "varchar(128)", "nullable": false, "comment": "记录标题"},
+        {"name": "attachment_url", "type": "varchar(255)", "nullable": true, "comment": "附件地址", "frontend": {"component": "file-upload"}},
+        {"name": "status", "type": "int", "nullable": false, "comment": "审核状态", "dictKey": "audit_status"},
+        {"name": "created_at", "type": "datetime", "nullable": false, "autoFill": "INSERT", "comment": "创建时间"}
+      ]
+    }
+  ],
+  "relations": [],
+  "global": {
+    "apiPrefix": "/api",
+    "author": "codegen",
+    "dateTimeFormat": "yyyy-MM-dd HH:mm:ss",
+    "enableSwagger": true
+  }
+}

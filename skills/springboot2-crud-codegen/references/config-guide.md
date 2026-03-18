@@ -5,6 +5,7 @@
 - [先记住这 8 条](#先记住这-8-条)
 - [顶层结构](#顶层结构)
 - [安全与权限配置 (Security/RBAC)](#安全与权限配置-securityrbac)
+- [字典配置 (Dictionaries)](#字典配置-dictionaries)
 - [多租户配置 (Multi-tenancy)](#多租户配置-multi-tenancy)
 - [后端与其他配置](#后端与其他配置)
 - [`tables[]` 完整说明](#tables-完整说明)
@@ -57,20 +58,28 @@
   },
   "rbac": {
     "strategy": "role_permission",
-    "superAdminRole": "ROLE_ADMIN"
+    "superAdminRole": "ROLE_ADMIN",
+    "defaultRoles": ["ROLE_USER"]
   }
 }
 ```
 **行为说明**：
 - 一旦 `enabled: true`，生成的项目 `pom.xml` 自动引入 Security 和 JJWT。
 - 自动生成 `WebSecurityConfig`、`JwtTokenUtil`、`AuthController` 等核心类。
+- 配置里的角色名会被统一规范成 `ROLE_*`；因此 `ADMIN`、`admin`、`ROLE_ADMIN` 最终都会按 `ROLE_ADMIN` 处理。
 - 生成四个开箱即用的认证接口：
   - `POST /api/auth/login` — 验证账密，返回 JWT Token
-  - `POST /api/auth/register` — 注册新账号（BCrypt 加密密码，默认授予 `ROLE_USER` 角色）
+  - `POST /api/auth/register` — 注册新账号（BCrypt 加密密码，自动绑定 `rbac.defaultRoles` 中的角色；未配置时默认 `ROLE_USER`）
   - `GET /api/auth/me` — 凭 Token 返回当前用户名 + 角色 + 权限列表（便于前端渲染菜单权限）
   - `POST /api/auth/change-password` — 先 BCrypt 校验旧密码，再加密存储新密码
+- 如果同时开启了 `frontend.enabled`，生成的 Vue 2 前端会在登录后和受保护路由跳转时调用 `/api/auth/me`，并把返回的 `roles` / `permissions` 用于路由守卫、侧边菜单过滤、仪表盘快捷入口过滤，以及 CRUD 页面新增/编辑/删除按钮显隐。
 - Parser 会隐式生成 `sys_user`, `sys_role`, `sys_user_role`, `sys_menu_permission`, `sys_role_permission` 这 5 张表的 Entity, Mapper, Service, Controller。
-- 默认在 `init.sql` 里塞入账号 `admin` / 密码 `123456`（经过 BCrypt 加密）的数据。
+- 默认在 `init.sql` 里塞入账号 `admin` / 密码 `123456`（经过 BCrypt 加密，可直接登录）的数据。
+- `init.sql` 还会自动补齐：
+  - 超级管理员角色
+  - 默认注册角色
+  - 业务表和联表自动生成的权限点
+  - 超级管理员角色到这些权限点的映射
 
 ### 表级/关联级的 `auth`
 ```json
@@ -92,7 +101,10 @@
 ```
 **行为说明**：
 - 如果没有写 `auth.permissions`，Parser 会自动按 `<table_name>:view` 这类规则兜底补全。
+- `roles` 中可以写 `ADMIN` 或 `ROLE_ADMIN`，最终都会按同一套角色语义处理。
 - 生成 Controller 时，会拼接为：`@PreAuthorize("hasAnyRole('ADMIN', 'MANAGER') or hasAuthority('product:add')")`。
+- 如果前端也启用，同一份 `auth` 会被传到前端模板，生成与后端一致的页面访问和按钮显隐规则；前端做的是体验层过滤，最终安全边界仍以后端接口权限为准。
+- 同时，表级 `POST /import` 会复用 create 对应的角色/权限规则，不再只是“登录即可导入”。
 
 ## 全局功能特性 (Global Features)
 
@@ -118,6 +130,7 @@
 - 开启后，生成的 `MybatisPlusConfig.java` 注入多租户拦截器。
 - `JwtAuthenticationFilter` 会自动尝试从 HTTP Header 的 `X-Tenant-Id` 或 JWT claims 里读取 tenant ID 存入 `TenantContextHolder` (ThreadLocal)。
 - 之后所有增删改查 SQL MyBatis-Plus 都会自动拼上 `WHERE tenant_id = ?`。
+- 生成器会自动忽略 `sys_user`、`sys_role`、`sys_user_role`、`sys_menu_permission`、`sys_role_permission`、`sys_dict_type`、`sys_dict_item`、`sys_log` 等系统表，避免认证、字典读取和日志写入被租户条件误拦。
 
 ### Swagger/Knife4j 接口文档生成
 
@@ -131,7 +144,46 @@
 **行为说明**：
 - 当 `enableSwagger: true` 时，生成的后端 `pom.xml` 中将自动注入 `@github.xiaoymin:knife4j-spring-boot-starter` 依赖。
 - 生成一个支持分组的全局 `SwaggerConfig.java` 配置文件。
-- 自动分析所有表(`table.comment`)及字段(`field.comment`)信息，利用 `@Api`、`@ApiOperation`、`@ApiModel`、`@ApiModelProperty` 等注解在生成的 Controller、Entities 以及 DTO 类上提供清晰友好的文档注释。启动后可访问 `/doc.html` 查看。
+- 自动分析所有表(`table.comment`)及字段(`field.comment`)信息，利用 `@Api`、`@ApiOperation`、`@ApiModel`、`@ApiModelProperty` 等注解在生成的 Controller、Entities 以及 DTO 类上提供清晰友好的文档注释。
+- 生成的 `application.yml` 会自动写入 `spring.mvc.pathmatch.matching-strategy: ant_path_matcher`，用于 Spring Boot 2.6+ 与 Springfox/Knife4j 的兼容。
+- 生成的 `WebSecurityConfig` 会自动放行 `/doc.html`、`/swagger-ui/**`、`/swagger-resources/**`、`/v2/api-docs`、`/webjars/**` 等文档路径。启动后可访问 `/doc.html` 查看。
+
+## 字典配置 (Dictionaries)
+
+顶层可以声明可复用字典：
+
+```json
+"dictionaries": [
+  {
+    "key": "user_status",
+    "name": "用户状态",
+    "valueType": "integer",
+    "items": [
+      {"label": "禁用", "value": 0, "sort": 10, "enabled": true},
+      {"label": "启用", "value": 1, "sort": 20, "enabled": true}
+    ]
+  }
+]
+```
+
+字段通过 `dictKey` 绑定：
+
+```json
+{
+  "name": "status",
+  "type": "int",
+  "nullable": false,
+  "dictKey": "user_status"
+}
+```
+
+**行为说明**：
+- `dictKey` 必须引用已存在的顶层字典。
+- `dictKey` 和 `frontend.options` 不能同时使用。
+- 生成器会自动注入 `sys_dict_type`、`sys_dict_item` 及其种子数据。
+- 后端额外生成字典管理 CRUD 与 `GET /api/system/dictionaries/{dictKey}/items`。
+- 前端表单和查询会远程拉取字典选项。
+- 导出 Excel 写标签，导入 Excel 同时接受标签和值。
 
 ## 后端与其他配置
 
@@ -169,6 +221,7 @@
 }
 ```
 渲染层在遇到这两个组件时，不仅会输出 `<el-upload>`，还会自动获取 JWT Token (`localStorage.getItem('token')`) 注入请求头，防止上传接口报 401 错误。
+在开启安全时，Token 会按 `<artifactId>_token` 的 key 存储，并由生成的前端鉴权工具统一管理。
 
 ## 智能前端表单校验 (Vue Form Validation)
 
